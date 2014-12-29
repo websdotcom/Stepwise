@@ -24,6 +24,9 @@ let ErrorDomain = "com.async-step.tests"
 let AsyncDispatchSpecificKey : NSString = "AsyncDispatchSpecificKey"
 
 class StepwiseTests: XCTestCase {
+    class var defaultError : NSError {
+        return NSError(domain: ErrorDomain, code: 0, userInfo: nil)
+    }
     
     func testDSL() {
         let expectation = expectationWithDescription("Chain creates a string from a number.")
@@ -127,7 +130,7 @@ class StepwiseTests: XCTestCase {
         let errorExpectation = expectationWithDescription("Second step errored.")
         
         let errorStep = toStep { (step: Step<Void, String>) in
-            step.error(NSError(domain: ErrorDomain, code: 0, userInfo: nil))
+            step.error(StepwiseTests.defaultError)
         }.onError { error in
             errorExpectation.fulfill()
         }
@@ -141,7 +144,7 @@ class StepwiseTests: XCTestCase {
         let errorExpectation = expectationWithDescription("Second step errored.")
         
         let chain = toStep { (step: Step<Void, String>) in
-            step.error(NSError(domain: ErrorDomain, code: 0, userInfo: nil))
+            step.error(StepwiseTests.defaultError)
         }.then { (step : Step<String, Int>) in
             XCTFail("This step should not execute.")
             step.resolve(1)
@@ -162,7 +165,7 @@ class StepwiseTests: XCTestCase {
             step.resolve("some result")
         }.then { (step : Step<String, Int>) in
             resolveExpectation.fulfill()
-            step.error(NSError(domain: ErrorDomain, code: 0, userInfo: nil))
+            step.error(StepwiseTests.defaultError)
         }.onError { error in
             errorExpectation.fulfill()
         }
@@ -170,6 +173,215 @@ class StepwiseTests: XCTestCase {
         chain.start()
         
         waitForExpectationsWithTimeout(5, nil)
+    }
+    
+    func testSingleStepFinally() {
+        let expectation = expectationWithDescription("Finally block should execute.")
+        
+        toStep { (step : Step<Void, Int>) in
+            step.resolve(1)
+        }.finally { state in
+            XCTAssertTrue(state.resolved, "State of chain should be resolved.")
+            expectation.fulfill()
+        }.start()
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+    }
+    
+    func testChainFinally() {
+        let expectation = expectationWithDescription("Finally block should execute.")
+        
+        toStep { (step : Step<Void, Int>) in
+            step.resolve(1)
+        }.then { (step : Step<Int, Int>) in
+            step.resolve(step.input + 1)
+        }.then { (step : Step<Int, Int>) in
+            step.resolve(step.input - 1)
+        }.then { (step : Step<Int, Void>) in
+            XCTAssertEqual(step.input, 1, "Steps should result in 1.")
+            step.resolve()
+        }.finally { state in
+            XCTAssertTrue(state.resolved, "State of chain should be resolved.")
+            expectation.fulfill()
+        }.start()
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+    }
+    
+    // A finally() statement in the middle of a chain should still execute last.
+    func testIntermediateFinallyInChain() {
+        let finalThenExpectation = expectationWithDescription("Final then() should execute.")
+        let finallyExpectation = expectationWithDescription("Finally block should execute.")
+        var finallyDidExecute = false
+        
+        toStep { (step : Step<Void, Int>) in
+            step.resolve(1)
+        }.then { (step : Step<Int, Int>) in
+            step.resolve(step.input + 1)
+        }.finally { state in
+            XCTAssertTrue(state.resolved, "State of chain should be resolved.")
+            finallyDidExecute = true
+            finallyExpectation.fulfill()
+        }.then { (step : Step<Int, Int>) in
+            step.resolve(step.input + 1)
+        }.then { (step : Step<Int, Void>) in
+            XCTAssertFalse(finallyDidExecute, "Finally statement should not have executed yet.")
+            XCTAssertEqual(step.input, 3, "Steps should result in 3.")
+            finalThenExpectation.fulfill()
+            step.resolve()
+        }.start()
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+    }
+
+    // The latest finally() statement should be executed and all previous ones ignored.
+    func testMultipleFinally() {
+        let expectation = expectationWithDescription("Finally block should execute.")
+        var wrongFinallyExecuted = false
+        
+        toStep { (step : Step<Void, Void>) in
+            step.resolve()
+        }.then { (step : Step<Void, Void>) in
+            step.resolve()
+        }.finally { state in
+            wrongFinallyExecuted = true
+        }.then { (step : Step<Void, Void>) in
+            step.resolve()
+        }.finally { state in
+            wrongFinallyExecuted = true
+        }.then { (step : Step<Void, Void>) in
+            step.resolve()
+        }.finally { state in
+            wrongFinallyExecuted = true
+        }.finally { state in
+            XCTAssertTrue(state.resolved, "State of chain should be resolved.")
+            expectation.fulfill()
+        }.start()
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+        
+        XCTAssertFalse(wrongFinallyExecuted, "Only the final finally() should execute.")
+    }
+    
+    // A finally() statement should still execute after an error.
+    func testErrorFinally() {
+        let errorExpectation = expectationWithDescription("onError() block should execute.")
+        let finallyExpectation = expectationWithDescription("Finally block should execute.")
+        var laterThenExecuted = false
+        
+        toStep { (step : Step<Void, Int>) in
+            step.resolve(1)
+        }.then { (step : Step<Int, Int>) in
+            step.error(StepwiseTests.defaultError)
+        }.then { (step : Step<Int, Int>) in
+            laterThenExecuted = true
+            step.resolve(step.input - 1)
+        }.then { (step : Step<Int, Void>) in
+            laterThenExecuted = true
+            step.resolve()
+        }.onError { error in
+            errorExpectation.fulfill()
+        }.finally { state in
+            XCTAssertTrue(state.errored, "State of chain should be errored.")
+            XCTAssertFalse(laterThenExecuted, "then() should not execute after an error.")
+            finallyExpectation.fulfill()
+        }.start()
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+    }
+    
+    func testMultipleFinallyWithError() {
+        let expectation = expectationWithDescription("Finally block should execute.")
+        var wrongFinallyExecuted = false
+        
+        toStep { (step : Step<Void, Void>) in
+            step.error(StepwiseTests.defaultError)
+        }.then { (step : Step<Void, Void>) in
+            step.resolve()
+        }.finally { state in
+            wrongFinallyExecuted = true
+        }.then { (step : Step<Void, Void>) in
+            step.resolve()
+        }.finally { state in
+            wrongFinallyExecuted = true
+        }.then { (step : Step<Void, Void>) in
+            step.resolve()
+        }.finally { state in
+            wrongFinallyExecuted = true
+        }.finally { state in
+            XCTAssertTrue(state.errored, "State of chain should be errored.")
+            expectation.fulfill()
+        }.start()
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+        
+        XCTAssertFalse(wrongFinallyExecuted, "Only the final finally() should execute.")
+    }
+    
+    func testFinallyCancellation() {
+        let finallyExpectation = expectationWithDescription("Finally block should execute.")
+        var didCancel = true
+        
+        let willCancelStep = toStep { (step: Step<Void, String>) in
+            didCancel = false
+            step.resolve("some result")
+        }.finally { state in
+            XCTAssertTrue(state.canceled, "State of chain should be canceled.")
+            switch state {
+                case .Canceled(let token): XCTAssertEqual(token.reason!, "Cancelling for a really good reason.", "Should be able to extract reason from finally state.")
+                default: XCTFail("State should be canceled.")
+            }
+            finallyExpectation.fulfill()
+        }
+        
+        let token = willCancelStep.cancellationToken
+        willCancelStep.start()
+        token.cancel(reason: "Cancelling for a really good reason.")
+        
+        let cancelExpectation = expectationWithDescription("Waiting for cancel to take effect.")
+        after(1.0) {
+            XCTAssertTrue(didCancel, "Step should have been canceled.")
+            XCTAssertEqual(token.reason!, "Cancelling for a really good reason.", "Token reason should match reason given")
+            cancelExpectation.fulfill()
+        }
+        
+        waitForExpectationsWithTimeout(5, nil)
+    }
+    
+    func testFinallyChainCancellation() {
+        let finallyExpectation = expectationWithDescription("Finally block should execute.")
+        var didCancel = true
+        
+        let chain = toStep { (step: Step<Void, String>) in
+            sleep(5)
+            step.resolve("some result")
+        }.then { (step: Step<String, Void>) in
+            didCancel = false
+            step.resolve()
+        }.finally { state in
+            XCTAssertTrue(state.canceled, "State of chain should be canceled.")
+            switch state {
+                case .Canceled(let token): XCTAssertEqual(token.reason!, "Cancelling for a really good reason.", "Should be able to extract reason from finally state.")
+                default: XCTFail("State should be canceled.")
+            }
+            finallyExpectation.fulfill()
+        }
+        
+        let token = chain.cancellationToken
+        chain.start()
+        
+        let cancelExpectation = expectationWithDescription("Waiting for cancel to take effect.")
+        after(3.0) {
+            let result = token.cancel(reason: "Cancelling for a really good reason.")
+        }
+        after(7.0) {
+            if didCancel {
+                cancelExpectation.fulfill()
+            }
+            XCTAssertEqual(token.reason!, "Cancelling for a really good reason.", "Cancellation reason should match one given.")
+        }
+        
+        waitForExpectationsWithTimeout(10, nil)
     }
     
     func testStepCancellation() {
@@ -186,13 +398,9 @@ class StepwiseTests: XCTestCase {
         
         let expectation = expectationWithDescription("Waiting for cancel to take effect.")
         after(1.0) {
-            if didCancel {
-                XCTAssertEqual(token.reason!, "Cancelling for a really good reason.", "Token reason should match reason given")
-                expectation.fulfill()
-            }
-            else {
-                XCTFail("Step should have been cancelled.")
-            }
+            XCTAssertTrue(didCancel, "Step should have been canceled.")
+            XCTAssertEqual(token.reason!, "Cancelling for a really good reason.", "Token reason should match reason given")
+            expectation.fulfill()
         }
         
         waitForExpectationsWithTimeout(5, nil)
@@ -315,6 +523,53 @@ class StepwiseTests: XCTestCase {
                 XCTFail("Step should have been cancelled.")
             }
         }
+
+        // MARK: Example 4
+        let example4Expectation = expectationWithDescription("Documentation example 4. Using finally() blocks.")
+        let outputStream : NSOutputStream = NSOutputStream(toMemory: ())
+        outputStream.open()
+        let someDataURL : NSURL = NSURL(fileURLWithPath: NSBundle(forClass: StepwiseTests.self).pathForResource("lime-cat", ofType: "jpg")!)!
+            
+        toStep { (step : Step<Void, NSData>) in
+            if let someData = NSData(contentsOfURL: someDataURL) {
+                // Pass it to the next step
+                step.resolve(someData)
+            }
+            else {
+                // Oh no! Something went wrong!
+                step.error(NSError(domain: "com.my.domain.fetch-data", code: -1, userInfo: nil))
+            }
+        }.then { (step: Step<NSData, Void>) in
+            // Write our data
+            let data = step.input
+            var bytes = UnsafePointer<UInt8>(data.bytes)
+            var bytesRemaining = data.length
+            
+            while bytesRemaining > 0 {
+                let written = outputStream.write(bytes, maxLength: bytesRemaining)
+                if written == -1 {
+                    step.error(NSError(domain: "com.my.domain.write-data", code: -1, userInfo: nil))
+                    return
+                }
+                
+                bytesRemaining -= written
+                bytes += written
+            }
+            
+            step.resolve()
+        }.onError { error in
+            // Handle error here...
+        }.finally { resultState in
+            // In our test we'll first verify the written bytes, then actually close the stream like in the example.
+            let bytesWritten = outputStream.propertyForKey(NSStreamDataWrittenToMemoryStreamKey) as NSData
+            let testData = NSData(contentsOfURL: someDataURL)!
+            XCTAssertTrue(bytesWritten.isEqualToData(testData), "Bytes written to output stream should match fetched image bytes.")
+            
+            // Close the stream here
+            outputStream.close()
+            
+            example4Expectation.fulfill()
+        }.start()
         
         // Wait for all documentation expectations.
         waitForExpectationsWithTimeout(10, nil)
