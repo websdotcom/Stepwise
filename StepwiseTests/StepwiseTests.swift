@@ -549,6 +549,7 @@ class StepwiseTests: XCTestCase {
                 let written = outputStream.write(bytes, maxLength: bytesRemaining)
                 if written == -1 {
                     step.error(NSError(domain: "com.my.domain.write-data", code: -1, userInfo: nil))
+                    return
                 }
                 
                 bytesRemaining -= written

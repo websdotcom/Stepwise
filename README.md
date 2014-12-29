@@ -92,21 +92,20 @@ You may optionally provide a `String` reason in the cancel method for logging pu
 
 ### Finally
 
-Each chain also provides a `finally` method which you can call to attach a handler that will *always* execute when the chain ends, errors, or is canceled. A `state` parameter is passed into the handler to indicate the result of the chain. Relying on `finally` to process the result of a chain is discouraged; instead, use another `then` step with a `Void` output type. `finally` is provided for must-occur situations regardless or error or cancel state, like closing file resources. Here's an example:
+Each chain also provides a `finally` method which you can call to attach a handler that will *always* execute when the chain ends, errors, or is canceled. A parameter of type `ChainState` is passed into the handler to indicate the result of the chain. Relying on `finally` to process the result of a chain is discouraged; instead, use another `then` step with a `Void` output type. `finally` is provided for must-occur situations regardless of error or cancel state, like closing file resources. Here's an example:
 
 ```swift
-// In this extremely contrived example, assume we already have an open `NSOutputStream` that we must close after our steps complete, regardless of success or erroring out.
+// In this extremely contrived example, assume we already have an open `NSOutputStream`
+// that we must close after our steps complete, regardless of success or erroring out.
 let outputStream : NSOutputStream = ...
 let someDataURL : NSURL = ...
 
 toStep { (step : Step<Void, NSData>) in
     if let someData = NSData(contentsOfURL: someDataURL) {
-        // Pass it to the next step
         step.resolve(someData)
     }
     else {
-        // Oh no! Something went wrong!
-        step.error(NSError(domain: "com.my.domain", code: -1, userInfo: nil))
+        step.error(NSError(domain: "com.my.domain.fetch-data", code: -1, userInfo: nil))
     }
 }.then { (step: Step<NSData, Void>) in
     // Write our data
@@ -118,6 +117,7 @@ toStep { (step : Step<Void, NSData>) in
         let written = outputStream.write(bytes, maxLength: bytesRemaining)
         if written == -1 {
             step.error(NSError(domain: "com.my.domain.write-data", code: -1, userInfo: nil))
+            return
         }
 
         bytesRemaining -= written
@@ -139,16 +139,16 @@ All of the examples in this README and others can be found in the library's test
 
 ### License
 
-Copyright (c) 2014, Webs <kevin@webs.com>
+    Copyright (c) 2014, Webs <kevin@webs.com>
 
-Permission to use, copy, modify, and/or distribute this software for any
-purpose with or without fee is hereby granted, provided that the above
-copyright notice and this permission notice appear in all copies.
+    Permission to use, copy, modify, and/or distribute this software for any
+    purpose with or without fee is hereby granted, provided that the above
+    copyright notice and this permission notice appear in all copies.
 
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+    WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+    MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+    ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+    WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+    ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+    OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
