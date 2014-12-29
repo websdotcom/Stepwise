@@ -90,6 +90,49 @@ token.cancel(reason: "Canceling for a really good reason.")
 
 You may optionally provide a `String` reason in the cancel method for logging purposes.
 
+### Finally
+
+Each chain also provides a `finally` method which you can call to attach a handler that will *always* execute when the chain ends, errors, or is canceled. A `state` parameter is passed into the handler to indicate the result of the chain. Relying on `finally` to process the result of a chain is discouraged; instead, use another `then` step with a `Void` output type. `finally` is provided for must-occur situations regardless or error or cancel state, like closing file resources. Here's an example:
+
+```swift
+// In this extremely contrived example, assume we already have an open `NSOutputStream` that we must close after our steps complete, regardless of success or erroring out.
+let outputStream : NSOutputStream = ...
+let someDataURL : NSURL = ...
+
+toStep { (step : Step<Void, NSData>) in
+    if let someData = NSData(contentsOfURL: someDataURL) {
+        // Pass it to the next step
+        step.resolve(someData)
+    }
+    else {
+        // Oh no! Something went wrong!
+        step.error(NSError(domain: "com.my.domain", code: -1, userInfo: nil))
+    }
+}.then { (step: Step<NSData, Void>) in
+    // Write our data
+    let data = step.input
+    var bytes = UnsafePointer<UInt8>(data.bytes)
+    var bytesRemaining = data.length
+
+    while bytesRemaining > 0 {
+        let written = outputStream.write(bytes, maxLength: bytesRemaining)
+        if written == -1 {
+            step.error(NSError(domain: "com.my.domain.write-data", code: -1, userInfo: nil))
+        }
+
+        bytesRemaining -= written
+        bytes += written
+    }
+
+    step.resolve()
+}.onError { error in
+    // Handle error here...
+}.finally { resultState in
+    // Close the stream here
+    outputStream.close()
+}.start()
+```
+
 ### Tests
 
 All of the examples in this README and others can be found in the library's tests, in [StepwiseTests.swift](https://github.com/websdotcom/Stepwise/blob/master/StepwiseTests/StepwiseTests.swift).

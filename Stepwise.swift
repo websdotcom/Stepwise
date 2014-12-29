@@ -126,6 +126,19 @@ public class StepChain<StartInputType, StartOutputType, CurrentInputType, Curren
         firstNode.errorHandler = errorHandler
         return self
     }
+    
+    /// Schedules a handler to be executed after the chain ends or is broken by error or cancellation.
+    /// A handler scheduled with finally() will always execute.
+    /// The single enum argument to the handler block marks the final state of the chain.
+    ///
+    /// :param: handler The handler to be executed when the chain ends.
+    /// :returns: The step chain.
+    public func finally(handler: (ChainState) -> ()) -> StepChain<StartInputType, StartOutputType, CurrentInputType, CurrentOutputType> {
+        // We place this on the first node although it's logically executed on the last because we may never reach the last—
+        // if the event of an error, the chain is broken. So we want to pass along from the very first node.
+        firstNode.finallyHandler = handler
+        return self
+    }
 }
 
 /// A step in an asynchronous step chain. Used to control the result of the step body.
@@ -146,7 +159,10 @@ public class Step<InputType, OutputType> {
     public func resolve(output: OutputType) {
         if let step = node {
             println("Resolved \(step) with output: \(output)")
+            // Calling resolveHandler will clear the finally handler, if another step exists in the chain.
             step.resolveHandler?(output)
+            // If we have a finally handler, execute it.
+            step.finallyHandler?(.Resolved(output))
         }
         node = nil
     }
@@ -170,6 +186,8 @@ public class Step<InputType, OutputType> {
         if let step = node {
             println("\(step) errored: \(error)")
             step.errorHandler?(error)
+            // If we have a finally handler, execute it.
+            step.finallyHandler?(.Errored(error))
         }
         node = nil
     }
@@ -211,6 +229,43 @@ public class CancellationToken {
     }
 }
 
+/// Used to identify how a StepChain entered a finally() block. See finally().
+public enum ChainState {
+    // TODO: Any way to not make this Any? Generics don't work b/c we pass the handler along the chain.
+    /// The step chain resolved successfully. Contains the final output of the chain.
+    case Resolved(Any)
+    /// The step chain ended in error. Contains the error passed to Step.error().
+    case Errored(NSError)
+    /// The step chain was canceled. Contains the cancellation token, which may be queried for a String reason.
+    case Canceled(CancellationToken)
+    
+    // Convenience methods
+    
+    /// :returns: true if chain was resolved successfully.
+    public var resolved : Bool {
+        switch self {
+            case .Resolved(_): return true
+            default: return false
+        }
+    }
+    
+    /// :returns: true if chain errored.
+    public var errored : Bool {
+        switch self {
+            case .Errored(_): return true
+            default: return false
+        }
+    }
+    
+    /// :returns: true if chain was canceled.
+    public var canceled : Bool {
+        switch self {
+            case .Canceled(_): return true
+            default: return false
+        }
+    }
+}
+
 /// MARK: Private
 
 // Node that encapsulates each step body in the chain
@@ -237,6 +292,8 @@ private class StepNode<InputType, OutputType> : Printable {
     private var resolveHandler : ((OutputType) -> ())?
     // Executed when step errors.
     private var errorHandler : StepErrorHandler?
+    // Executed by the final step in a chain, if present.
+    private var finallyHandler : ((ChainState) -> ())?
     // The control, publicly exposed as the "step," that's handed via the API and used to resolve/error.
     private weak var control : Step<InputType, OutputType>?
     
@@ -261,23 +318,37 @@ private class StepNode<InputType, OutputType> : Printable {
     }
     
     // Schedules a new step after this one.
+    // Scheduling a new step passes the finally block on.
     private func then<Value2>(nextStep: StepNode<OutputType, Value2>) {
         // Scheduling a step overwrites its cancellation token
         nextStep.cancellationToken = self.cancellationToken
+        
+        // Scheduling a step passes along the finallyHandler. It's cleared on resolve or cancel.
+        // We keep it around for now in case this step errors and resolve never happens.
+        nextStep.finallyHandler = nextStep.finallyHandler ?? self.finallyHandler
         
         resolveHandler = { [weak self] output in
             let isCancelled = self?.isCancelled ?? false
             if isCancelled { self?.doCancel(); return }
             
-            // Pass state the chain, if present and unset on future steps
+            // Pass state through the chain, if present and unset on future steps
             nextStep.cancellationToken = self?.cancellationToken ?? nextStep.cancellationToken
             nextStep.errorHandler = self?.errorHandler ?? nextStep.errorHandler
+            nextStep.finallyHandler = nextStep.finallyHandler ?? self?.finallyHandler
+            self?.finallyHandler = nil // Can clear here, we're moving on to the next step.
             nextStep.start(output)
         }
     }
     
-    // Logs the cancellation of this step.
+    // Finalizes the cancellation of this step.
     private func doCancel() {
+        // Call finally handler, if present.
+        self.finallyHandler?(.Canceled(cancellationToken))
+        // We must clear the finally handler here, as doCancel() is called from the resolve handler
+        // and may be followed by a direct call to the finally handler in Step.resolve().
+        // Not clearing here results in a double call.
+        self.finallyHandler = nil
+        
         if let reason = cancellationToken.reason {
             println("\(self) cancelled with reason: \(reason).")
         }
