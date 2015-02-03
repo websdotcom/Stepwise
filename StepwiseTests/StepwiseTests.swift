@@ -494,7 +494,6 @@ class StepwiseTests: XCTestCase {
             step.resolve(countElements(step.input))
         }.onError { error in
             example2Expectation.fulfill()
-            println("ERROR: \(error.localizedDescription)")
         }.start()
         
         // MARK: Example 3
