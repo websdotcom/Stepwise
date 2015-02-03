@@ -19,7 +19,13 @@
 import Foundation
 
 // TODO: Once/if we can specialize generic top-level functions, consider a new DSL syntax.
-// TODO: Add debug log flag.
+
+public var StepDebugLoggingEnabled = false
+private func stepwisePrintln<T>(x: T) {
+    if StepDebugLoggingEnabled {
+        debugPrintln(x)
+    }
+}
 
 // MARK: DSL
 
@@ -158,7 +164,7 @@ public class Step<InputType, OutputType> {
     /// :param: output The output of the step.
     public func resolve(output: OutputType) {
         if let step = node {
-            println("Resolved \(step) with output: \(output)")
+            stepwisePrintln("Resolved \(step) with output: \(output)")
             // Calling resolveHandler will clear the finally handler, if another step exists in the chain.
             step.resolveHandler?(output)
             // If we have a finally handler, execute it.
@@ -173,7 +179,7 @@ public class Step<InputType, OutputType> {
     /// :param: chain The next chain of steps to execute. The first step in this chain will accept output as its input.
     public func resolve<Value2, Value3, Value4>(output: OutputType, then chain: StepChain<OutputType, Value2, Value3, Value4>) {
         if let step = node {
-            println("Resolving \(step) to new chain...")
+            stepwisePrintln("Resolving \(step) to new chain...")
             step.then(chain.firstNode)
         }
         resolve(output)
@@ -184,7 +190,7 @@ public class Step<InputType, OutputType> {
     /// :param: error The error generated in this step.
     public func error(error: NSError) {
         if let step = node {
-            println("\(step) errored: \(error)")
+            stepwisePrintln("\(step) errored: \(error)")
             step.errorHandler?(error)
             // If we have a finally handler, execute it.
             step.finallyHandler?(.Errored(error))
@@ -269,7 +275,7 @@ public enum ChainState {
 /// MARK: Private
 
 // Node that encapsulates each step body in the chain
-private class StepNode<InputType, OutputType> : Printable {
+private class StepNode<InputType, OutputType> : DebugPrintable {
     private typealias StepBody = (Step<InputType, OutputType>) -> ()
     
     // Name of the step.
@@ -280,7 +286,7 @@ private class StepNode<InputType, OutputType> : Printable {
     private var cancellationToken : CancellationToken = CancellationToken()
     // true if token has been marked as cancelled, false if not.
     private var isCancelled : Bool { return cancellationToken.cancelled }
-    private var description : String {
+    private var debugDescription : String {
         if let name = name {
             return "[Step '" + name + "']"
         }
@@ -307,7 +313,7 @@ private class StepNode<InputType, OutputType> : Printable {
     private func start(input: InputType) {
         if isCancelled { doCancel(); return }
         
-        println("Starting \(self) with input: \(input)")
+        stepwisePrintln("Starting \(self) with input: \(input)")
         dispatch_async(executionQueue) {
             if self.isCancelled { self.doCancel(); return }
             
@@ -350,10 +356,10 @@ private class StepNode<InputType, OutputType> : Printable {
         self.finallyHandler = nil
         
         if let reason = cancellationToken.reason {
-            println("\(self) cancelled with reason: \(reason).")
+            stepwisePrintln("\(self) cancelled with reason: \(reason).")
         }
         else {
-            println("\(self) cancelled.")
+            stepwisePrintln("\(self) cancelled.")
         }
     }
 }

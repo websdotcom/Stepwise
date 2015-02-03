@@ -137,6 +137,10 @@ toStep { (step : Step<Void, NSData>) in
 
 All of the examples in this README and others can be found in the library's tests, in [StepwiseTests.swift](https://github.com/websdotcom/Stepwise/blob/master/StepwiseTests/StepwiseTests.swift).
 
+### Random Goodies
+
+Set `Stepwise.StepDebugLoggingEnabled` to `true` to get log messages of what's happening in your steps.
+
 ### License
 
     Copyright (c) 2014, Webs <kevin@webs.com>
