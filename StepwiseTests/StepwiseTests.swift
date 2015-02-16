@@ -43,7 +43,7 @@ class StepwiseTests: XCTestCase {
         
         chain.start(2)
         
-        waitForExpectationsWithTimeout(5, nil)
+        waitForExpectationsWithTimeout(5, handler: nil)
     }
     
     func testChaining() {
@@ -106,7 +106,7 @@ class StepwiseTests: XCTestCase {
         }
         chain3.start(1)
         
-        waitForExpectationsWithTimeout(5, nil)
+        waitForExpectationsWithTimeout(5, handler: nil)
     }
     
     func testCustomStepQueue() {
@@ -123,7 +123,7 @@ class StepwiseTests: XCTestCase {
             }
         }.start()
         
-        waitForExpectationsWithTimeout(5, nil)
+        waitForExpectationsWithTimeout(5, handler: nil)
     }
     
     func testStepError() {
@@ -137,7 +137,7 @@ class StepwiseTests: XCTestCase {
         
         errorStep.start()
         
-        waitForExpectationsWithTimeout(5, nil)
+        waitForExpectationsWithTimeout(5, handler: nil)
     }
     
     func testChainErrorFirstStep() {
@@ -154,7 +154,7 @@ class StepwiseTests: XCTestCase {
         
         chain.start()
         
-        waitForExpectationsWithTimeout(5, nil)
+        waitForExpectationsWithTimeout(5, handler: nil)
     }
     
     func testChainErrorLaterStep() {
@@ -172,7 +172,7 @@ class StepwiseTests: XCTestCase {
         
         chain.start()
         
-        waitForExpectationsWithTimeout(5, nil)
+        waitForExpectationsWithTimeout(5, handler: nil)
     }
     
     func testSingleStepFinally() {
@@ -345,7 +345,7 @@ class StepwiseTests: XCTestCase {
             cancelExpectation.fulfill()
         }
         
-        waitForExpectationsWithTimeout(5, nil)
+        waitForExpectationsWithTimeout(5, handler: nil)
     }
     
     func testFinallyChainCancellation() {
@@ -381,7 +381,7 @@ class StepwiseTests: XCTestCase {
             XCTAssertEqual(token.reason!, "Cancelling for a really good reason.", "Cancellation reason should match one given.")
         }
         
-        waitForExpectationsWithTimeout(10, nil)
+        waitForExpectationsWithTimeout(10, handler: nil)
     }
     
     func testStepCancellation() {
@@ -403,7 +403,7 @@ class StepwiseTests: XCTestCase {
             expectation.fulfill()
         }
         
-        waitForExpectationsWithTimeout(5, nil)
+        waitForExpectationsWithTimeout(5, handler: nil)
     }
     
     func testChainCancellation() {
@@ -431,7 +431,7 @@ class StepwiseTests: XCTestCase {
             XCTAssertEqual(token.reason!, "Cancelling for a really good reason.", "Cancellation reason should match one given.")
         }
         
-        waitForExpectationsWithTimeout(10, nil)
+        waitForExpectationsWithTimeout(10, handler: nil)
     }
     
     func testDocumentationExamples() {
@@ -491,7 +491,7 @@ class StepwiseTests: XCTestCase {
         }.then { (step : Step<String, Int>) in
             // This never executes.
             println("I never execute!")
-            step.resolve(countElements(step.input))
+            step.resolve(count(step.input))
         }.onError { error in
             example2Expectation.fulfill()
         }.start()
@@ -560,7 +560,7 @@ class StepwiseTests: XCTestCase {
             // Handle error here...
         }.finally { resultState in
             // In our test we'll first verify the written bytes, then actually close the stream like in the example.
-            let bytesWritten = outputStream.propertyForKey(NSStreamDataWrittenToMemoryStreamKey) as NSData
+            let bytesWritten = outputStream.propertyForKey(NSStreamDataWrittenToMemoryStreamKey) as! NSData
             let testData = NSData(contentsOfURL: someDataURL)!
             XCTAssertTrue(bytesWritten.isEqualToData(testData), "Bytes written to output stream should match fetched image bytes.")
             
@@ -571,7 +571,7 @@ class StepwiseTests: XCTestCase {
         }.start()
         
         // Wait for all documentation expectations.
-        waitForExpectationsWithTimeout(10, nil)
+        waitForExpectationsWithTimeout(10, handler: nil)
     }
 }
 

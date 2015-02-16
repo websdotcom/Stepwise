@@ -64,7 +64,7 @@ public func toStep<InputType, OutputType>(inQueue: dispatch_queue_t!, body: (Ste
 /// :param: body The body of the step, which takes InputType as input and outputs OutputType.
 /// :returns: A StepChain object. Can be extended with then() and started with start().
 public func toStep<InputType, OutputType>(named: String?, inQueue: dispatch_queue_t!, body: (Step<InputType, OutputType>) -> ()) -> StepChain<InputType, OutputType, InputType, OutputType> {
-    let step = StepNode<InputType, OutputType>(name: named, queue: inQueue, body)
+    let step = StepNode<InputType, OutputType>(name: named, queue: inQueue, body: body)
     return StepChain(step, step)
 }
 
@@ -95,7 +95,7 @@ public class StepChain<StartInputType, StartOutputType, CurrentInputType, Curren
     /// :param: body The body of the step, which takes InputType as input and outputs OutputType.
     /// :returns: A new StepChain that ends in the added step. Can be extended with then() and started with start().
     public func then<NextOutputType>(name: String? = nil, queue: dispatch_queue_t! = DefaultStepQueue, body: (Step<CurrentOutputType, NextOutputType>) -> ()) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
-        let step = StepNode<CurrentOutputType, NextOutputType>(name: name, queue: queue, body)
+        let step = StepNode<CurrentOutputType, NextOutputType>(name: name, queue: queue, body: body)
         return then(step)
     }
     
