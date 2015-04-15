@@ -141,6 +141,16 @@ All of the examples in this README and others can be found in the library's test
 
 Set `Stepwise.StepDebugLoggingEnabled` to `true` to get log messages of what's happening in your steps.
 
+### Swift Versions
+
+Stepwise uses Swift 1.2. The following table tracks older Swift versions and the corresponding git tag to use for that version.
+
+Swift Version | Tag
+------------- | ---
+1.0 | swift-1.1
+1.1 | swift-1.1
+
+
 ### License
 
     Copyright (c) 2014, Webs <kevin@webs.com>
