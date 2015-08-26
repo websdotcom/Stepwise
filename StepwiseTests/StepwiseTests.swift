@@ -336,7 +336,7 @@ class StepwiseTests: XCTestCase {
         
         let token = willCancelStep.cancellationToken
         willCancelStep.start()
-        token.cancel(reason: "Cancelling for a really good reason.")
+        token.cancel("Cancelling for a really good reason.")
         
         let cancelExpectation = expectationWithDescription("Waiting for cancel to take effect.")
         after(1.0) {
@@ -372,7 +372,7 @@ class StepwiseTests: XCTestCase {
         
         let cancelExpectation = expectationWithDescription("Waiting for cancel to take effect.")
         after(3.0) {
-            let result = token.cancel(reason: "Cancelling for a really good reason.")
+            token.cancel("Cancelling for a really good reason.")
         }
         after(7.0) {
             if didCancel {
@@ -394,7 +394,7 @@ class StepwiseTests: XCTestCase {
         
         let token = willCancelStep.cancellationToken
         willCancelStep.start()
-        token.cancel(reason: "Cancelling for a really good reason.")
+        token.cancel("Cancelling for a really good reason.")
         
         let expectation = expectationWithDescription("Waiting for cancel to take effect.")
         after(1.0) {
@@ -422,7 +422,7 @@ class StepwiseTests: XCTestCase {
         
         let expectation = expectationWithDescription("Waiting for cancel to take effect.")
         after(3.0) {
-            let result = token.cancel(reason: "Cancelling for a really good reason.")
+            token.cancel("Cancelling for a really good reason.")
         }
         after(7.0) {
             if didCancel {
@@ -480,7 +480,7 @@ class StepwiseTests: XCTestCase {
         }
         
         let limecatFileURL = NSBundle(forClass: StepwiseTests.self).pathForResource("lime-cat", ofType: "jpg")!
-        let importantImageURL = NSURL(fileURLWithPath: limecatFileURL)!
+        let importantImageURL = NSURL(fileURLWithPath: limecatFileURL)
         fetchAndResizeImageSteps.start(importantImageURL)
         
         // MARK: Example 2
@@ -490,8 +490,8 @@ class StepwiseTests: XCTestCase {
             step.error(NSError(domain: "com.my.domain", code: -1, userInfo: [NSLocalizedDescriptionKey : "Error in step 1!"]))
         }.then { (step : Step<String, Int>) in
             // This never executes.
-            println("I never execute!")
-            step.resolve(count(step.input))
+            print("I never execute!")
+            step.resolve(step.input.characters.count)
         }.onError { error in
             example2Expectation.fulfill()
         }.start()
@@ -510,7 +510,7 @@ class StepwiseTests: XCTestCase {
         
         // Grab the step's token and cancel it.
         let token = willCancelStep.cancellationToken
-        token.cancel(reason: "Cancelling for a really good reason.")
+        token.cancel("Cancelling for a really good reason.")
         
         // Test that cancellation happened
         after(1.0) {
@@ -527,7 +527,7 @@ class StepwiseTests: XCTestCase {
         let example4Expectation = expectationWithDescription("Documentation example 4. Using finally() blocks.")
         let outputStream : NSOutputStream = NSOutputStream(toMemory: ())
         outputStream.open()
-        let someDataURL : NSURL = NSURL(fileURLWithPath: NSBundle(forClass: StepwiseTests.self).pathForResource("lime-cat", ofType: "jpg")!)!
+        let someDataURL : NSURL = NSURL(fileURLWithPath: NSBundle(forClass: StepwiseTests.self).pathForResource("lime-cat", ofType: "jpg")!)
             
         toStep { (step : Step<Void, NSData>) in
             if let someData = NSData(contentsOfURL: someDataURL) {
