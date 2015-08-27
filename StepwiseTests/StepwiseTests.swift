@@ -31,9 +31,9 @@ class StepwiseTests: XCTestCase {
     func testDSL() {
         let expectation = expectationWithDescription("Chain creates a string from a number.")
         
-        let chain = toStep { (step : Step<Int, Int>) in
+        let chain = toStep { step in
             step.resolve(step.input + 1)
-        }.then { (step : Step<Int, String>) in
+        }.then { step in
             step.resolve("\(step.input)")
         }.then { (step : Step<String, Void>) in
             XCTAssertEqual(step.input, "3", "Assuming 2, chain adds 1, then transforms to string.")

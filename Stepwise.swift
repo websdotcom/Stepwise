@@ -18,6 +18,8 @@
 
 import Foundation
 
+// TODO: Function to convert a throwing function with a single return value into a step.
+    // Throwing = failure, returning = resolution
 // TODO: Once/if we can specialize generic top-level functions, consider a new DSL syntax.
 
 public var StepDebugLoggingEnabled = false
