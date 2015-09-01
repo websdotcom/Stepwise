@@ -18,11 +18,7 @@
 
 import Foundation
 
-// TODO: Function to convert a throwing function with a single return value into a step.
-    // Throwing = failure, returning = resolution
-// TODO: Use default arguments for global functions
 // TODO: Any protocol additions here?
-// TODO: Once/if we can specialize generic top-level functions, consider a new DSL syntax.
 
 public var StepDebugLoggingEnabled = false
 private func stepwisePrint<T>(x: T) {
@@ -39,8 +35,8 @@ private let DefaultStepQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY
 ///
 /// - parameter body: The body of the step, which takes InputType as input and outputs OutputType.
 /// - returns: A StepChain object. Can be extended with then() and started with start().
-public func toStep<InputType, OutputType>(body: (Step<InputType, OutputType>) throws -> ()) -> StepChain<InputType, OutputType, InputType, OutputType> {
-    return toStep(nil, inQueue: DefaultStepQueue, body: body)
+public func toStep<InputType, OutputType>(body: InputType throws -> OutputType) -> StepChain<InputType, OutputType, InputType, OutputType> {
+    return toStep(named: nil, inQueue: DefaultStepQueue, body: body)
 }
 
 /// Package the supplied closure as the first step, named name, in a chain. Schedules on default global queue.
@@ -48,8 +44,8 @@ public func toStep<InputType, OutputType>(body: (Step<InputType, OutputType>) th
 /// - parameter named: Name of the step. Logged for debugging.
 /// - parameter body: The body of the step, which takes InputType as input and outputs OutputType.
 /// - returns: A StepChain object. Can be extended with then() and started with start().
-public func toStep<InputType, OutputType>(named: String?, body: (Step<InputType, OutputType>) throws -> ()) -> StepChain<InputType, OutputType, InputType, OutputType> {
-    return toStep(named, inQueue: DefaultStepQueue, body: body)
+public func toStep<InputType, OutputType>(named name: String?, body: InputType throws -> OutputType) -> StepChain<InputType, OutputType, InputType, OutputType> {
+    return toStep(named: name, inQueue: DefaultStepQueue, body: body)
 }
 
 /// Package the supplied closure on queue as the first step in a chain. Schedules a nameless step.
@@ -57,34 +53,19 @@ public func toStep<InputType, OutputType>(named: String?, body: (Step<InputType,
 /// - parameter inQueue: Queue on which to execute the step.
 /// - parameter body: The body of the step, which takes InputType as input and outputs OutputType.
 /// - returns: A StepChain object. Can be extended with then() and started with start().
-public func toStep<InputType, OutputType>(inQueue: dispatch_queue_t!, body: (Step<InputType, OutputType>) throws -> ()) -> StepChain<InputType, OutputType, InputType, OutputType> {
-    return toStep(nil, inQueue: inQueue, body: body)
+public func toStep<InputType, OutputType>(inQueue queue: dispatch_queue_t!, body: InputType throws -> OutputType) -> StepChain<InputType, OutputType, InputType, OutputType> {
+    return toStep(named: nil, inQueue: queue, body: body)
 }
 
 /// Package the supplied closure on queue as the first step, named name, in a chain.
 ///
-/// - parameter named: Name of the step. Logged for debugging.
+/// - parameter name: Name of the step. Logged for debugging.
 /// - parameter inQueue: Queue on which to execute the step.
 /// - parameter body: The body of the step, which takes InputType as input and outputs OutputType.
 /// - returns: A StepChain object. Can be extended with then() and started with start().
-public func toStep<InputType, OutputType>(named: String?, inQueue: dispatch_queue_t!, body: (Step<InputType, OutputType>) throws -> ()) -> StepChain<InputType, OutputType, InputType, OutputType> {
-    let step = StepNode<InputType, OutputType>(name: named, queue: inQueue, body: body)
+public func toStep<InputType, OutputType>(named name: String?, inQueue: dispatch_queue_t!, body: InputType throws -> OutputType) -> StepChain<InputType, OutputType, InputType, OutputType> {
+    let step = StepNode<InputType, OutputType>(name: name, queue: inQueue, body: body)
     return StepChain(step, step)
-}
-
-//public func toStep<InputType where InputType != Step, OutputType>(named: String? = nil, inQueue: dispatch_queue_t! = DefaultStepQueue, body: (InputType) -> OutputType) -> StepChain<InputType, OutputType, InputType, OutputType> {
-//    return toStep(named, inQueue: inQueue) { (step : Step<InputType, OutputType>) in
-//        let output = body(step.input)
-//        step.resolve(output)
-//    }
-//}
-
-public func toStep<InputType, OutputType>(body: (InputType) throws -> OutputType) -> StepChain<InputType, OutputType, InputType, OutputType> {
-    let stepNode = StepNode<InputType, OutputType>(name: nil, queue: DefaultStepQueue) { (step : Step<InputType, OutputType>) in
-        let output = try body(step.input)
-        step.resolve(output)
-    }
-    return StepChain(stepNode, stepNode)
 }
 
 /// A closure that accepts an ErrorType. Used when handling errors in Steps.
@@ -107,13 +88,25 @@ public class StepChain<StartInputType, StartOutputType, CurrentInputType, Curren
         self.lastNode = last
     }
     
+    public func then<NextOutputType>(body: CurrentOutputType throws -> NextOutputType) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
+        return then(nil, inQueue: DefaultStepQueue, body: body)
+    }
+    
+    public func then<NextOutputType>(inQueue queue: dispatch_queue_t!, body: CurrentOutputType throws -> NextOutputType) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
+        return then(nil, inQueue: queue, body: body)
+    }
+    
+    public func then<NextOutputType>(name: String?, body: CurrentOutputType throws -> NextOutputType) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
+        return then(name, inQueue: DefaultStepQueue, body: body)
+    }
+    
     /// Add a new step named name on queue to the receiver and return the result.
     ///
     /// - parameter name: The name of the step. Defaults to nil.
     /// - parameter queue: The queue on which to execute the step. Defaults to default priority global queue.
     /// - parameter body: The body of the step, which takes InputType as input and outputs OutputType.
     /// - returns: A new StepChain that ends in the added step. Can be extended with then() and started with start().
-    public func then<NextOutputType>(name: String? = nil, queue: dispatch_queue_t! = DefaultStepQueue, body: (Step<CurrentOutputType, NextOutputType>) throws -> ()) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
+    public func then<NextOutputType>(name: String?, inQueue queue: dispatch_queue_t!, body: CurrentOutputType throws -> NextOutputType) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
         let step = StepNode<CurrentOutputType, NextOutputType>(name: name, queue: queue, body: body)
         return then(step)
     }
@@ -128,14 +121,6 @@ public class StepChain<StartInputType, StartOutputType, CurrentInputType, Curren
         
         // Return last step of incoming chain
         return StepChain<StartInputType, StartOutputType, Value2, Value3>(firstNode, chain.lastNode)
-    }
-    
-    public func then<NextOutputType>(body: (CurrentOutputType) throws -> NextOutputType) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
-        return then(toStep(body))
-    }
-    
-    public func then<NextOutputType>(name: String? = nil, queue: dispatch_queue_t! = DefaultStepQueue, body: (CurrentOutputType) throws -> NextOutputType) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
-        return then(toStep(body))
     }
     
     private func then<NextOutputType>(nextStep: StepNode<CurrentOutputType, NextOutputType>) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
@@ -171,49 +156,6 @@ public class StepChain<StartInputType, StartOutputType, CurrentInputType, Curren
         // if the event of an error, the chain is broken. So we want to pass along from the very first node.
         firstNode.finallyHandler = handler
         return self
-    }
-}
-
-/// A step in an asynchronous step chain. Used to control the result of the step body.
-public class Step<InputType, OutputType> {
-    /// The input passed to this step.
-    public let input : InputType
-
-    private var node : StepNode<InputType, OutputType>?
-    
-    private init(input: InputType, step: StepNode<InputType, OutputType>) {
-        self.input = input
-        self.node = step
-    }
-    
-    /// Mark the step as successfully generating output.
-    ///
-    /// - parameter output: The output of the step.
-    public func resolve(output: OutputType) {
-        if let step = node {
-            stepwisePrint("Resolved \(step) with output: \(output)")
-            // Calling resolveHandler will clear the finally handler, if another step exists in the chain.
-            step.resolveHandler?(output)
-            // If we have a finally handler, execute it.
-            step.finallyHandler?(.Resolved(output))
-        }
-        node = nil
-    }
-    
-    /// Mark the step as successfully generating output and then continue to a new chain of steps.
-    ///
-    /// - parameter output: The output of the step.
-    /// - parameter chain: The next chain of steps to execute. The first step in this chain will accept output as its input.
-    public func resolve<Value2, Value3, Value4>(output: OutputType, then chain: StepChain<OutputType, Value2, Value3, Value4>) {
-        if let step = node {
-            stepwisePrint("Resolving \(step) to new chain...")
-            step.then(chain.firstNode)
-        }
-        resolve(output)
-    }
-    
-    private func stepWasCanceled() {
-        node = nil
     }
 }
 
@@ -290,7 +232,7 @@ public enum ChainState {
 
 // Node that encapsulates each step body in the chain
 private class StepNode<InputType, OutputType> : CustomDebugStringConvertible {
-    private typealias StepBody = (Step<InputType, OutputType>) throws -> ()
+    private typealias StepBody = InputType throws -> OutputType
     
     // Name of the step.
     private var name : String?
@@ -314,8 +256,6 @@ private class StepNode<InputType, OutputType> : CustomDebugStringConvertible {
     private var errorHandler : StepErrorHandler?
     // Executed by the final step in a chain, if present.
     private var finallyHandler : ((ChainState) -> ())?
-    // The control, publicly exposed as the "step," that's handed via the API and used to resolve/error.
-    private weak var control : Step<InputType, OutputType>?
     
     private init(name: String?, queue: dispatch_queue_t!, body: StepBody) {
         self.name = name
@@ -331,13 +271,19 @@ private class StepNode<InputType, OutputType> : CustomDebugStringConvertible {
         dispatch_async(executionQueue) {
             if self.isCancelled { self.doCancel(); return }
             
-            let thisControl = Step<InputType, OutputType>(input: input, step: self)
-            self.control = thisControl
             do {
-                try self.body(thisControl)
+                let output = try self.body(input)
+                stepwisePrint("Resolved \(self) with output: \(output)")
+                
+                // Calling resolveHandler will clear the finally handler if another step exists in the chain.
+                self.resolveHandler?(output)
+                
+                // If we have a finally handler, execute it.
+                self.finallyHandler?(.Resolved(output))
             } catch {
                 stepwisePrint("\(self) errored: \(error)")
                 self.errorHandler?(error)
+                
                 // If we have a finally handler, execute it.
                 self.finallyHandler?(.Errored(error))
             }

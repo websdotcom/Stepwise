@@ -30,17 +30,16 @@ class StepwiseTests: XCTestCase {
     
     func testDSL() {
         let expectation = expectationWithDescription("Chain creates a string from a number.")
-        
-        let chain = toStep { step in
-            step.resolve(step.input + 1)
-        }.then { step in
-            step.resolve("\(step.input)")
-        }.then { (step : Step<String, Void>) in
-            XCTAssertEqual(step.input, "3", "Assuming 2, chain adds 1, then transforms to string.")
-            step.resolve()
+
+        let chain = toStep { input in
+            return input + 1
+        }.then { input in
+            return "\(input)"
+        }.then { input in
+            XCTAssertEqual(input, "3", "Assuming 2, chain adds 1, then transforms to string.")
             expectation.fulfill()
         }
-        
+
         chain.start(2)
         
         waitForExpectationsWithTimeout(5, handler: nil)
@@ -55,56 +54,53 @@ class StepwiseTests: XCTestCase {
         // step -> chain.then
         let chain1Expectation = expectationWithDescription("Chain #1 completed.")
         
-        toStep { (step : Step<Int, Int>) in
-            step.resolve(step.input + 1)
-        }.then { (step : Step<Int, Int>) in
-            step.resolve(step.input + 2)
-        }.then { (step : Step<Int, Int>) in
-            step.resolve(step.input + 3)
-        }.then { (step : Step<Int, Void>) in
-            XCTAssertEqual(step.input, 7, "Assuming 1, should add 6.")
-            step.resolve()
+        toStep { input in
+            return input + 1
+        }.then { input in
+            return input + 2
+        }.then { input in
+            return input + 3
+        }.then { input in
+            XCTAssertEqual(input, 7, "Assuming 1, should add 6.")
             chain1Expectation.fulfill()
         }.start(1)
         
         // step -> chain.then(chain:)
         let chain2Expectation = expectationWithDescription("Chain #2 completed.")
         
-        let chain2 = toStep { (step: Step<Int, Int>) in
-            step.resolve(step.input + 1)
+        let chain2 = toStep { input in
+            return input + 1
         }
-        let chain2b = toStep { (step: Step<Int, Int>) in
-            step.resolve(step.input + 2)
+        let chain2b = toStep { input in
+            return input + 2
         }
-        let chain2c = toStep { (step: Step<Int, Int>) in
-            step.resolve(step.input + 3)
+        let chain2c = toStep { input in
+            return input + 3
         }
-        let chain2d = toStep { (step: Step<Int, Void>) in
-            XCTAssertEqual(step.input, 7, "Assuming 1, should add 6.")
-            step.resolve()
+        let chain2d = toStep { (input : Int) in
+            XCTAssertEqual(input, 7, "Assuming 1, should add 6.")
             chain2Expectation.fulfill()
         }
         chain2.then(chain2b).then(chain2c).then(chain2d)
         chain2.start(1)
         
         // step -> resolve.then(chain:)
-        let chain3Expectation = expectationWithDescription("Chain #3 completed.")
-        
-        let chain3d = toStep { (step: Step<Int, Void>) in
-            XCTAssertEqual(step.input, 7, "Assuming 1, should add 6.")
-            step.resolve()
-            chain3Expectation.fulfill()
-        }
-        let chain3c = toStep { (step: Step<Int, Int>) in
-            step.resolve(step.input + 3, then: chain3d)
-        }
-        let chain3b = toStep { (step: Step<Int, Int>) in
-            step.resolve(step.input + 2, then: chain3c)
-        }
-        let chain3 = toStep { (step: Step<Int, Int>) in
-            step.resolve(step.input + 1, then: chain3b)
-        }
-        chain3.start(1)
+//        let chain3Expectation = expectationWithDescription("Chain #3 completed.")
+//        
+//        let chain3d = toStep { (input : Int) in
+//            XCTAssertEqual(input, 7, "Assuming 1, should add 6.")
+//            chain3Expectation.fulfill()
+//        }
+//        let chain3c = toStep { input in
+//            step.resolve(step.input + 3, then: chain3d)
+//        }
+//        let chain3b = toStep { (step: Step<Int, Int>) in
+//            step.resolve(step.input + 2, then: chain3c)
+//        }
+//        let chain3 = toStep { (step: Step<Int, Int>) in
+//            step.resolve(step.input + 1, then: chain3b)
+//        }
+//        chain3.start(1)
         
         waitForExpectationsWithTimeout(5, handler: nil)
     }
@@ -116,7 +112,7 @@ class StepwiseTests: XCTestCase {
         
         let expectatation = expectationWithDescription("Expect current queue to match specified queue.")
         
-        toStep(customQueue) { (step: Step<Void, Void>) in
+        toStep(inQueue: customQueue) {
             let result = dispatch_get_specific(AsyncDispatchSpecificKey.UTF8String)
             if result != nil {
                 expectatation.fulfill()
@@ -127,27 +123,25 @@ class StepwiseTests: XCTestCase {
     }
     
     func testStepError() {
-        let errorExpectation = expectationWithDescription("Second step errored.")
+        let errorExpectation = expectationWithDescription("Step errored.")
         
-        let errorStep = toStep { (step: Step<Void, String>) in
+        toStep {
             throw StepwiseTests.defaultError
         }.onError { error in
             errorExpectation.fulfill()
-        }
-        
-        errorStep.start()
+        }.start()
         
         waitForExpectationsWithTimeout(5, handler: nil)
     }
     
     func testChainErrorFirstStep() {
-        let errorExpectation = expectationWithDescription("Second step errored.")
+        let errorExpectation = expectationWithDescription("Step errored.")
         
-        let chain = toStep { (step: Step<Void, String>) in
+        let chain = toStep {
             throw StepwiseTests.defaultError
-        }.then { (step : Step<String, Int>) in
+        }.then { () -> Int in
             XCTFail("This step should not execute.")
-            step.resolve(1)
+            return 1
         }.onError { error in
             errorExpectation.fulfill()
         }
@@ -161,9 +155,9 @@ class StepwiseTests: XCTestCase {
         let resolveExpectation = expectationWithDescription("First step resolved to second.")
         let errorExpectation = expectationWithDescription("Second step errored.")
         
-        let chain = toStep { (step: Step<Void, String>) in
-            step.resolve("some result")
-        }.then { (step : Step<String, Int>) in
+        let chain = toStep {
+            return "some result"
+        }.then { input in
             resolveExpectation.fulfill()
             throw StepwiseTests.defaultError
         }.onError { error in
@@ -178,8 +172,8 @@ class StepwiseTests: XCTestCase {
     func testSingleStepFinally() {
         let expectation = expectationWithDescription("Finally block should execute.")
         
-        toStep { (step : Step<Void, Int>) in
-            step.resolve(1)
+        toStep {
+            return 1
         }.finally { state in
             XCTAssertTrue(state.resolved, "State of chain should be resolved.")
             expectation.fulfill()
@@ -191,15 +185,14 @@ class StepwiseTests: XCTestCase {
     func testChainFinally() {
         let expectation = expectationWithDescription("Finally block should execute.")
         
-        toStep { (step : Step<Void, Int>) in
-            step.resolve(1)
-        }.then { (step : Step<Int, Int>) in
-            step.resolve(step.input + 1)
-        }.then { (step : Step<Int, Int>) in
-            step.resolve(step.input - 1)
-        }.then { (step : Step<Int, Void>) in
-            XCTAssertEqual(step.input, 1, "Steps should result in 1.")
-            step.resolve()
+        toStep {
+            return 1
+        }.then { input in
+            return input + 1
+        }.then { input in
+            return input - 1
+        }.then { (input : Int) in
+            XCTAssertEqual(input, 1, "Steps should result in 1.")
         }.finally { state in
             XCTAssertTrue(state.resolved, "State of chain should be resolved.")
             expectation.fulfill()
@@ -214,21 +207,20 @@ class StepwiseTests: XCTestCase {
         let finallyExpectation = expectationWithDescription("Finally block should execute.")
         var finallyDidExecute = false
         
-        toStep { (step : Step<Void, Int>) in
-            step.resolve(1)
-        }.then { (step : Step<Int, Int>) in
-            step.resolve(step.input + 1)
+        toStep {
+            return 1
+        }.then { input in
+            return input + 1
         }.finally { state in
             XCTAssertTrue(state.resolved, "State of chain should be resolved.")
             finallyDidExecute = true
             finallyExpectation.fulfill()
-        }.then { (step : Step<Int, Int>) in
-            step.resolve(step.input + 1)
-        }.then { (step : Step<Int, Void>) in
+        }.then { input in
+            return input + 1
+        }.then { input in
             XCTAssertFalse(finallyDidExecute, "Finally statement should not have executed yet.")
-            XCTAssertEqual(step.input, 3, "Steps should result in 3.")
+            XCTAssertEqual(input, 3, "Steps should result in 3.")
             finalThenExpectation.fulfill()
-            step.resolve()
         }.start()
         
         waitForExpectationsWithTimeout(5, handler: nil)
@@ -239,18 +231,18 @@ class StepwiseTests: XCTestCase {
         let expectation = expectationWithDescription("Finally block should execute.")
         var wrongFinallyExecuted = false
         
-        toStep { (step : Step<Void, Void>) in
-            step.resolve()
-        }.then { (step : Step<Void, Void>) in
-            step.resolve()
+        toStep {
+            return
+        }.then {
+            return
         }.finally { state in
             wrongFinallyExecuted = true
-        }.then { (step : Step<Void, Void>) in
-            step.resolve()
+        }.then {
+            return
         }.finally { state in
             wrongFinallyExecuted = true
-        }.then { (step : Step<Void, Void>) in
-            step.resolve()
+        }.then {
+            return
         }.finally { state in
             wrongFinallyExecuted = true
         }.finally { state in
@@ -269,16 +261,15 @@ class StepwiseTests: XCTestCase {
         let finallyExpectation = expectationWithDescription("Finally block should execute.")
         var laterThenExecuted = false
         
-        toStep { (step : Step<Void, Int>) in
-            step.resolve(1)
-        }.then { (step : Step<Int, Int>) in
+        toStep {
+            return 1
+        }.then { (input : Int) -> Int in
             throw StepwiseTests.defaultError
-        }.then { (step : Step<Int, Int>) in
+        }.then { (input : Int) -> Int in
             laterThenExecuted = true
-            step.resolve(step.input - 1)
-        }.then { (step : Step<Int, Void>) in
+            return input - 1
+        }.then { input in
             laterThenExecuted = true
-            step.resolve()
         }.onError { error in
             errorExpectation.fulfill()
         }.finally { state in
@@ -294,18 +285,18 @@ class StepwiseTests: XCTestCase {
         let expectation = expectationWithDescription("Finally block should execute.")
         var wrongFinallyExecuted = false
         
-        toStep { (step : Step<Void, Void>) in
+        toStep {
             throw StepwiseTests.defaultError
-        }.then { (step : Step<Void, Void>) in
-            step.resolve()
+        }.then {
+            return
         }.finally { state in
             wrongFinallyExecuted = true
-        }.then { (step : Step<Void, Void>) in
-            step.resolve()
+        }.then {
+            return
         }.finally { state in
             wrongFinallyExecuted = true
-        }.then { (step : Step<Void, Void>) in
-            step.resolve()
+        }.then {
+            return
         }.finally { state in
             wrongFinallyExecuted = true
         }.finally { state in
@@ -322,9 +313,9 @@ class StepwiseTests: XCTestCase {
         let finallyExpectation = expectationWithDescription("Finally block should execute.")
         var didCancel = true
         
-        let willCancelStep = toStep { (step: Step<Void, String>) in
+        let willCancelStep = toStep { () -> String in
             didCancel = false
-            step.resolve("some result")
+            return "some result"
         }.finally { state in
             XCTAssertTrue(state.canceled, "State of chain should be canceled.")
             switch state {
@@ -352,12 +343,11 @@ class StepwiseTests: XCTestCase {
         let finallyExpectation = expectationWithDescription("Finally block should execute.")
         var didCancel = true
         
-        let chain = toStep { (step: Step<Void, String>) in
+        let chain = toStep { () -> String in
             sleep(5)
-            step.resolve("some result")
-        }.then { (step: Step<String, Void>) in
+            return "some result"
+        }.then { input in
             didCancel = false
-            step.resolve()
         }.finally { state in
             XCTAssertTrue(state.canceled, "State of chain should be canceled.")
             switch state {
@@ -387,9 +377,9 @@ class StepwiseTests: XCTestCase {
     func testStepCancellation() {
         var didCancel = true
         
-        let willCancelStep = toStep { (step: Step<Void, String>) in
+        let willCancelStep = toStep { () -> String in
             didCancel = false
-            step.resolve("some result")
+            return "some result"
         }
         
         let token = willCancelStep.cancellationToken
@@ -409,12 +399,11 @@ class StepwiseTests: XCTestCase {
     func testChainCancellation() {
         var didCancel = true
         
-        let chain = toStep { (step: Step<Void, String>) in
+        let chain = toStep { () -> String in
             sleep(5)
-            step.resolve("some result")
-        }.then { (step: Step<String, Void>) in
+            return "some result"
+        }.then { input in
             didCancel = false
-            step.resolve()
         }
         
         let token = chain.cancellationToken
@@ -441,10 +430,9 @@ class StepwiseTests: XCTestCase {
         
         let expectation = expectationWithDescription("Step should succeed")
         
-        toStep(aFunction).then { (step : Step<String, Void>) in
-            XCTAssertEqual(step.input, "yes")
+        toStep(aFunction).then { input in
+            XCTAssertEqual(input, "yes")
             expectation.fulfill()
-            step.resolve()
         }.start(true)
 
         waitForExpectationsWithTimeout(5, handler: nil)
@@ -465,10 +453,9 @@ class StepwiseTests: XCTestCase {
         
         let goodExpectation = expectationWithDescription("Chain will output a string")
         
-        toStep(aThrowingFunction).then { (step : Step<String, Void>) in
-            XCTAssertEqual(step.input, "my output string")
+        toStep(aThrowingFunction).then { input in
+            XCTAssertEqual(input, "my output string")
             goodExpectation.fulfill()
-            step.resolve()
         }.onError { error in
             XCTFail("No error should have occurred.")
         }.start(true)
@@ -477,8 +464,8 @@ class StepwiseTests: XCTestCase {
         
         let badExpectation = expectationWithDescription("Chain will fail")
         
-        toStep(aThrowingFunction).then { (step : Step<String, Void>) in
-            step.resolve()
+        toStep(aThrowingFunction).then { input in
+            return
         }.onError { error in
             badExpectation.fulfill()
         }.start(false)
@@ -513,18 +500,16 @@ class StepwiseTests: XCTestCase {
         let goodIntegers = Array(1...100)
         let goodExpectation = expectationWithDescription("Chain should succeed")
         
-        toStep(reversedArrayHatesHundred).then(reversedArrayHatesOnes).then { (step : Step<[Int], Void>) in
-            XCTAssertEqual(goodIntegers, step.input)
+        toStep(reversedArrayHatesHundred).then(reversedArrayHatesOnes).then { integers in
+            XCTAssertEqual(goodIntegers, integers)
             goodExpectation.fulfill()
-            step.resolve()
         }.start(goodIntegers)
         
         let badOneIntegers = Array(1...100)
         let badOneExpectation = expectationWithDescription("Chain should error with ThrowableError.StartsWithOne")
         
-        toStep(reversedArrayHatesOnes).then(reversedArrayHatesHundred).then { (step : Step<[Int], Void>) in
+        toStep(reversedArrayHatesOnes).then(reversedArrayHatesHundred).then { integers in
             XCTFail("Chain should not succeed.")
-            step.resolve()
         }.onError { error in
             if let throwable = error as? ThrowableError where throwable == .StartsWithOne {
                 badOneExpectation.fulfill()
@@ -534,9 +519,8 @@ class StepwiseTests: XCTestCase {
         let badHundredIntegers = Array(1...100)
         let badHundredExpectation = expectationWithDescription("Chain should error with ThrowableError.StartsWithHundred")
         
-        toStep(reversedArrayHatesHundred).then(reversedArrayHatesHundred).then { (step : Step<[Int], Void>) in
+        toStep(reversedArrayHatesHundred).then(reversedArrayHatesHundred).then { integers in
             XCTFail("Chain should not succeed.")
-            step.resolve()
         }.onError { error in
             if let throwable = error as? ThrowableError where throwable == .StartsWithHundred {
                 badHundredExpectation.fulfill()
@@ -550,27 +534,21 @@ class StepwiseTests: XCTestCase {
         // MARK: Example 1
         let example1Expectation = expectationWithDescription("Documentation example 1. Resolving a full chain.")
         
-        let fetchAndResizeImageSteps = toStep { (step: Step<NSURL, UIImage>) in
-            // This is the url we pass into the step chain
-            let url = step.input
-            
+        let fetchAndResizeImageSteps = toStep { (url : NSURL) -> UIImage in
             // Fetch the image data. Obviously we'd be using Alamofire or something irl.
             if let imageData = NSData(contentsOfURL: url) {
                 // Create the image
                 let image = UIImage(data: imageData)!
                 
                 // Pass it to the next step
-                step.resolve(image)
+                return image
             }
             else {
                 // Oh no! Something went wrong!
                 throw NSError(domain: "com.my.domain", code: -1, userInfo: nil)
             }
-        }.then { (step: Step<UIImage, UIImage>) in
-            // Grab the fetched image
-            let image = step.input
-            
-            // Resize it
+        }.then { (image : UIImage) -> UIImage in
+            // Resize the image
             let targetSize = CGSize(width: image.size.width / 2.0, height: image.size.height / 2.0)
             UIGraphicsBeginImageContextWithOptions(targetSize, true, 0.0)
             image.drawInRect(CGRect(origin: CGPoint(x: 0, y: 0), size: targetSize))
@@ -578,17 +556,13 @@ class StepwiseTests: XCTestCase {
             UIGraphicsEndImageContext()
             
             // Return it
-            step.resolve(resizedImage)
-        }.then { (step: Step<UIImage, Void>) in
-            // Get fetched, resized image
-            let image = step.input
-            
+            return resizedImage
+        }.then { image in
             XCTAssertEqual(image.size, CGSize(width: 240, height: 204), "Assuming input image of lime-cat.jpg, image should be shrunk in half.")
             example1Expectation.fulfill()
             
             // Do something with image here.
             // Set it to a shared variable, pass it to another step, etc.
-            step.resolve()
         }
         
         let limecatFileURL = NSBundle(forClass: StepwiseTests.self).pathForResource("lime-cat", ofType: "jpg")!
@@ -598,12 +572,12 @@ class StepwiseTests: XCTestCase {
         // MARK: Example 2
         let example2Expectation = expectationWithDescription("Documentation example 2. Erroring during a step.")
         
-        toStep { (step: Step<Void, String>) in
+        toStep { () -> String in
             throw NSError(domain: "com.my.domain", code: -1, userInfo: [NSLocalizedDescriptionKey : "Error in step 1!"])
-        }.then { (step : Step<String, Int>) in
+        }.then { (input : String) -> Int in
             // This never executes.
             print("I never execute!")
-            step.resolve(step.input.characters.count)
+            return input.characters.count
         }.onError { error in
             example2Expectation.fulfill()
         }.start()
@@ -612,10 +586,10 @@ class StepwiseTests: XCTestCase {
         let example3Expectation = expectationWithDescription("Documentation example 3. Canceling during a step.")
         var example3DidCancel = true
         
-        let willCancelStep = toStep { (step: Step<Void, String>) in
+        let willCancelStep = toStep { () -> String in
             // Will never execute.
             example3DidCancel = false
-            step.resolve("some result")
+            return "some result"
         }
         
         willCancelStep.start()
@@ -641,18 +615,17 @@ class StepwiseTests: XCTestCase {
         outputStream.open()
         let someDataURL : NSURL = NSURL(fileURLWithPath: NSBundle(forClass: StepwiseTests.self).pathForResource("lime-cat", ofType: "jpg")!)
             
-        toStep { (step : Step<Void, NSData>) in
+        toStep { () -> NSData in
             if let someData = NSData(contentsOfURL: someDataURL) {
                 // Pass it to the next step
-                step.resolve(someData)
+                return someData
             }
             else {
                 // Oh no! Something went wrong!
                 throw NSError(domain: "com.my.domain.fetch-data", code: -1, userInfo: nil)
             }
-        }.then { (step: Step<NSData, Void>) in
+        }.then { data in
             // Write our data
-            let data = step.input
             var bytes = UnsafePointer<UInt8>(data.bytes)
             var bytesRemaining = data.length
             
@@ -665,8 +638,6 @@ class StepwiseTests: XCTestCase {
                 bytesRemaining -= written
                 bytes += written
             }
-            
-            step.resolve()
         }.onError { error in
             // Handle error here...
         }.finally { resultState in
