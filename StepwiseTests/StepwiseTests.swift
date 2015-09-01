@@ -130,7 +130,7 @@ class StepwiseTests: XCTestCase {
         let errorExpectation = expectationWithDescription("Second step errored.")
         
         let errorStep = toStep { (step: Step<Void, String>) in
-            step.error(StepwiseTests.defaultError)
+            throw StepwiseTests.defaultError
         }.onError { error in
             errorExpectation.fulfill()
         }
@@ -144,7 +144,7 @@ class StepwiseTests: XCTestCase {
         let errorExpectation = expectationWithDescription("Second step errored.")
         
         let chain = toStep { (step: Step<Void, String>) in
-            step.error(StepwiseTests.defaultError)
+            throw StepwiseTests.defaultError
         }.then { (step : Step<String, Int>) in
             XCTFail("This step should not execute.")
             step.resolve(1)
@@ -165,7 +165,7 @@ class StepwiseTests: XCTestCase {
             step.resolve("some result")
         }.then { (step : Step<String, Int>) in
             resolveExpectation.fulfill()
-            step.error(StepwiseTests.defaultError)
+            throw StepwiseTests.defaultError
         }.onError { error in
             errorExpectation.fulfill()
         }
@@ -272,7 +272,7 @@ class StepwiseTests: XCTestCase {
         toStep { (step : Step<Void, Int>) in
             step.resolve(1)
         }.then { (step : Step<Int, Int>) in
-            step.error(StepwiseTests.defaultError)
+            throw StepwiseTests.defaultError
         }.then { (step : Step<Int, Int>) in
             laterThenExecuted = true
             step.resolve(step.input - 1)
@@ -295,7 +295,7 @@ class StepwiseTests: XCTestCase {
         var wrongFinallyExecuted = false
         
         toStep { (step : Step<Void, Void>) in
-            step.error(StepwiseTests.defaultError)
+            throw StepwiseTests.defaultError
         }.then { (step : Step<Void, Void>) in
             step.resolve()
         }.finally { state in
@@ -434,6 +434,118 @@ class StepwiseTests: XCTestCase {
         waitForExpectationsWithTimeout(10, handler: nil)
     }
     
+    func testFunctionConversion() {
+        func aFunction(aBool: Bool) -> String {
+            return aBool ? "yes" : "no"
+        }
+        
+        let expectation = expectationWithDescription("Step should succeed")
+        
+        toStep(aFunction).then { (step : Step<String, Void>) in
+            XCTAssertEqual(step.input, "yes")
+            expectation.fulfill()
+            step.resolve()
+        }.start(true)
+
+        waitForExpectationsWithTimeout(5, handler: nil)
+    }
+    
+    func testThrowingFunctionConversion() {
+        struct AnError : ErrorType {
+            let message = "A good error message"
+        }
+        
+        func aThrowingFunction(aBool: Bool) throws -> String {
+            guard aBool else {
+                throw AnError()
+            }
+            
+            return "my output string"
+        }
+        
+        let goodExpectation = expectationWithDescription("Chain will output a string")
+        
+        toStep(aThrowingFunction).then { (step : Step<String, Void>) in
+            XCTAssertEqual(step.input, "my output string")
+            goodExpectation.fulfill()
+            step.resolve()
+        }.onError { error in
+            XCTFail("No error should have occurred.")
+        }.start(true)
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+        
+        let badExpectation = expectationWithDescription("Chain will fail")
+        
+        toStep(aThrowingFunction).then { (step : Step<String, Void>) in
+            step.resolve()
+        }.onError { error in
+            badExpectation.fulfill()
+        }.start(false)
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+    }
+    
+    func testThrowingThen() {
+        enum ThrowableError : ErrorType {
+            case StartsWithOne
+            case StartsWithHundred
+        }
+        
+        func reversedArrayHatesOnes(array: [Int]) throws -> [Int] {
+            print("One: \(array.first)")
+            guard array.first != 1 else {
+                throw ThrowableError.StartsWithOne
+            }
+            
+            return array.reverse()
+        }
+        
+        func reversedArrayHatesHundred(array: [Int]) throws -> [Int] {
+            print("Hundred: \(array.first)")
+            guard array.first != 100 else {
+                throw ThrowableError.StartsWithHundred
+            }
+            
+            return array.reverse()
+        }
+        
+        let goodIntegers = Array(1...100)
+        let goodExpectation = expectationWithDescription("Chain should succeed")
+        
+        toStep(reversedArrayHatesHundred).then(reversedArrayHatesOnes).then { (step : Step<[Int], Void>) in
+            XCTAssertEqual(goodIntegers, step.input)
+            goodExpectation.fulfill()
+            step.resolve()
+        }.start(goodIntegers)
+        
+        let badOneIntegers = Array(1...100)
+        let badOneExpectation = expectationWithDescription("Chain should error with ThrowableError.StartsWithOne")
+        
+        toStep(reversedArrayHatesOnes).then(reversedArrayHatesHundred).then { (step : Step<[Int], Void>) in
+            XCTFail("Chain should not succeed.")
+            step.resolve()
+        }.onError { error in
+            if let throwable = error as? ThrowableError where throwable == .StartsWithOne {
+                badOneExpectation.fulfill()
+            }
+        }.start(badOneIntegers)
+        
+        let badHundredIntegers = Array(1...100)
+        let badHundredExpectation = expectationWithDescription("Chain should error with ThrowableError.StartsWithHundred")
+        
+        toStep(reversedArrayHatesHundred).then(reversedArrayHatesHundred).then { (step : Step<[Int], Void>) in
+            XCTFail("Chain should not succeed.")
+            step.resolve()
+        }.onError { error in
+            if let throwable = error as? ThrowableError where throwable == .StartsWithHundred {
+                badHundredExpectation.fulfill()
+            }
+        }.start(badHundredIntegers)
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+    }
+    
     func testDocumentationExamples() {
         // MARK: Example 1
         let example1Expectation = expectationWithDescription("Documentation example 1. Resolving a full chain.")
@@ -452,7 +564,7 @@ class StepwiseTests: XCTestCase {
             }
             else {
                 // Oh no! Something went wrong!
-                step.error(NSError(domain: "com.my.domain", code: -1, userInfo: nil))
+                throw NSError(domain: "com.my.domain", code: -1, userInfo: nil)
             }
         }.then { (step: Step<UIImage, UIImage>) in
             // Grab the fetched image
@@ -487,7 +599,7 @@ class StepwiseTests: XCTestCase {
         let example2Expectation = expectationWithDescription("Documentation example 2. Erroring during a step.")
         
         toStep { (step: Step<Void, String>) in
-            step.error(NSError(domain: "com.my.domain", code: -1, userInfo: [NSLocalizedDescriptionKey : "Error in step 1!"]))
+            throw NSError(domain: "com.my.domain", code: -1, userInfo: [NSLocalizedDescriptionKey : "Error in step 1!"])
         }.then { (step : Step<String, Int>) in
             // This never executes.
             print("I never execute!")
@@ -536,7 +648,7 @@ class StepwiseTests: XCTestCase {
             }
             else {
                 // Oh no! Something went wrong!
-                step.error(NSError(domain: "com.my.domain.fetch-data", code: -1, userInfo: nil))
+                throw NSError(domain: "com.my.domain.fetch-data", code: -1, userInfo: nil)
             }
         }.then { (step: Step<NSData, Void>) in
             // Write our data
@@ -547,8 +659,7 @@ class StepwiseTests: XCTestCase {
             while bytesRemaining > 0 {
                 let written = outputStream.write(bytes, maxLength: bytesRemaining)
                 if written == -1 {
-                    step.error(NSError(domain: "com.my.domain.write-data", code: -1, userInfo: nil))
-                    return
+                    throw NSError(domain: "com.my.domain.write-data", code: -1, userInfo: nil)
                 }
                 
                 bytesRemaining -= written
