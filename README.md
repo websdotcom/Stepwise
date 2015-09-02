@@ -1,5 +1,7 @@
 # Stepwise
 
+**NOTE:** For Swift 2 support, try the Stepwise 2.0 beta using the `2.0-beta2` tag in Cocoapods or the [swift-2.0](https://github.com/websdotcom/Stepwise/tree/swift-2.0) branch.
+
 Stepwise is a Swift framework for executing a series of steps asynchronously. Steps are single-dependency and cancelable. `Step` objects wrap your closures; they're genericized so you get strongly-typed inputs and outputs. Here's a totally contrived example of steps to fetch an image from the Internet and shrink it by half:
 
 ```swift
