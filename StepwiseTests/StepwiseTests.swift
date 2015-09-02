@@ -534,19 +534,15 @@ class StepwiseTests: XCTestCase {
         // MARK: Example 1
         let example1Expectation = expectationWithDescription("Documentation example 1. Resolving a full chain.")
         
-        let fetchAndResizeImageSteps = toStep { (url : NSURL) -> UIImage in
-            // Fetch the image data. Obviously we'd be using Alamofire or something irl.
-            if let imageData = NSData(contentsOfURL: url) {
-                // Create the image
-                let image = UIImage(data: imageData)!
-                
-                // Pass it to the next step
-                return image
-            }
-            else {
-                // Oh no! Something went wrong!
+        let fetchAndResizeImage = toStep { (url : NSURL) -> UIImage in
+            // Fetch the image and create it. Obviously we'd be using Alamofire or something irl.
+            guard let imageData = NSData(contentsOfURL: url), image = UIImage(data: imageData) else {
                 throw NSError(domain: "com.my.domain", code: -1, userInfo: nil)
             }
+            
+            // Pass it to the next step
+            return image
+            
         }.then { (image : UIImage) -> UIImage in
             // Resize the image
             let targetSize = CGSize(width: image.size.width / 2.0, height: image.size.height / 2.0)
@@ -567,7 +563,7 @@ class StepwiseTests: XCTestCase {
         
         let limecatFileURL = NSBundle(forClass: StepwiseTests.self).pathForResource("lime-cat", ofType: "jpg")!
         let importantImageURL = NSURL(fileURLWithPath: limecatFileURL)
-        fetchAndResizeImageSteps.start(importantImageURL)
+        fetchAndResizeImage.start(importantImageURL)
         
         // MARK: Example 2
         let example2Expectation = expectationWithDescription("Documentation example 2. Erroring during a step.")
@@ -579,6 +575,7 @@ class StepwiseTests: XCTestCase {
             print("I never execute!")
             return input.characters.count
         }.onError { error in
+            XCTAssertEqual((error as NSError).localizedDescription, "Error in step 1!")
             example2Expectation.fulfill()
         }.start()
         
@@ -590,9 +587,7 @@ class StepwiseTests: XCTestCase {
             // Will never execute.
             example3DidCancel = false
             return "some result"
-        }
-        
-        willCancelStep.start()
+        }.start()
         
         // Grab the step's token and cancel it.
         let token = willCancelStep.cancellationToken
@@ -616,14 +611,10 @@ class StepwiseTests: XCTestCase {
         let someDataURL : NSURL = NSURL(fileURLWithPath: NSBundle(forClass: StepwiseTests.self).pathForResource("lime-cat", ofType: "jpg")!)
             
         toStep { () -> NSData in
-            if let someData = NSData(contentsOfURL: someDataURL) {
-                // Pass it to the next step
-                return someData
-            }
-            else {
-                // Oh no! Something went wrong!
+            guard let someData = NSData(contentsOfURL: someDataURL) else {
                 throw NSError(domain: "com.my.domain.fetch-data", code: -1, userInfo: nil)
             }
+            return someData
         }.then { data in
             // Write our data
             var bytes = UnsafePointer<UInt8>(data.bytes)
@@ -654,6 +645,8 @@ class StepwiseTests: XCTestCase {
         
         // Wait for all documentation expectations.
         waitForExpectationsWithTimeout(10, handler: nil)
+        
+        XCTAssertTrue(outputStream.streamStatus == .Closed)
     }
 }
 

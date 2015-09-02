@@ -27,8 +27,6 @@ private func stepwisePrint<T>(x: T) {
     }
 }
 
-// MARK: DSL
-
 private let DefaultStepQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)
 
 /// Package the supplied closure as the first step in a chain. Schedules the nameless step on default global queue.
@@ -88,14 +86,28 @@ public class StepChain<StartInputType, StartOutputType, CurrentInputType, Curren
         self.lastNode = last
     }
     
+    /// Execute a new step after this one.
+    ///
+    /// - parameter body: The body of the step, which takes InputType as input and outputs OutputType.
+    /// - returns: A new StepChain that ends in the added step. Can be extended with then() and started with start().
     public func then<NextOutputType>(body: CurrentOutputType throws -> NextOutputType) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
         return then(nil, inQueue: DefaultStepQueue, body: body)
     }
     
+    /// Execute a new step after this one on a given dispatch queue.
+    ///
+    /// - parameter queue: The queue on which to execute the step. Defaults to default priority global queue.
+    /// - parameter body: The body of the step, which takes InputType as input and outputs OutputType.
+    /// - returns: A new StepChain that ends in the added step. Can be extended with then() and started with start().
     public func then<NextOutputType>(inQueue queue: dispatch_queue_t!, body: CurrentOutputType throws -> NextOutputType) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
         return then(nil, inQueue: queue, body: body)
     }
     
+    /// Execute a new step named name after this one.
+    ///
+    /// - parameter name: The name of the step. Defaults to nil.
+    /// - parameter body: The body of the step, which takes InputType as input and outputs OutputType.
+    /// - returns: A new StepChain that ends in the added step. Can be extended with then() and started with start().
     public func then<NextOutputType>(name: String?, body: CurrentOutputType throws -> NextOutputType) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
         return then(name, inQueue: DefaultStepQueue, body: body)
     }
@@ -131,13 +143,14 @@ public class StepChain<StartInputType, StartOutputType, CurrentInputType, Curren
     /// Begins execution of each step in the chain, in order.
     ///
     /// - parameter input: The input for the first step.
-    public func start(input: StartInputType) {
+    public func start(input: StartInputType) -> StepChain {
         firstNode.start(input)
+        return self
     }
     
     /// Adds an error handler to every step in the chain.
-    /// NOTE: Each chain may only have a single error handler.
     ///
+    /// - note: Each chain may only have a single error handler.
     /// - parameter errorHandler: The handler to add to the chain.
     /// - returns: The step chain.
     public func onError(errorHandler: StepErrorHandler) -> StepChain<StartInputType, StartOutputType, CurrentInputType, CurrentOutputType> {
@@ -232,39 +245,39 @@ public enum ChainState {
 
 // Node that encapsulates each step body in the chain
 private class StepNode<InputType, OutputType> : CustomDebugStringConvertible {
-    private typealias StepBody = InputType throws -> OutputType
+    typealias StepBody = InputType throws -> OutputType
     
     // Name of the step.
-    private var name : String?
+    var name : String?
     // Queue on which to execute the step.
-    private let executionQueue : dispatch_queue_t!
+    let executionQueue : dispatch_queue_t!
     // Token, checked on start and on execution.
-    private var cancellationToken : CancellationToken = CancellationToken()
+    var cancellationToken : CancellationToken = CancellationToken()
     // true if token has been marked as cancelled, false if not.
-    private var isCancelled : Bool { return cancellationToken.cancelled }
-    private var debugDescription : String {
+    var isCancelled : Bool { return cancellationToken.cancelled }
+    var debugDescription : String {
         if let name = name {
             return "[Step '" + name + "']"
         }
         return "[Step]"
     }
     // Closure body for step.
-    private let body : StepBody
+    let body : StepBody
     // Executed when step is resolved.
-    private var resolveHandler : ((OutputType) -> ())?
+    var resolveHandler : ((OutputType) -> ())?
     // Executed when step errors.
-    private var errorHandler : StepErrorHandler?
+    var errorHandler : StepErrorHandler?
     // Executed by the final step in a chain, if present.
-    private var finallyHandler : ((ChainState) -> ())?
+    var finallyHandler : ((ChainState) -> ())?
     
-    private init(name: String?, queue: dispatch_queue_t!, body: StepBody) {
+    init(name: String?, queue: dispatch_queue_t!, body: StepBody) {
         self.name = name
         self.executionQueue = queue
         self.body = body
     }
     
     // Starts the step on the target queue.
-    private func start(input: InputType) {
+    func start(input: InputType) {
         if isCancelled { doCancel(); return }
         
         stepwisePrint("Starting \(self) with input: \(input)")
@@ -292,7 +305,7 @@ private class StepNode<InputType, OutputType> : CustomDebugStringConvertible {
     
     // Schedules a new step after this one.
     // Scheduling a new step passes the finally block on.
-    private func then<Value2>(nextStep: StepNode<OutputType, Value2>) {
+    func then<Value2>(nextStep: StepNode<OutputType, Value2>) {
         // Scheduling a step overwrites its cancellation token
         nextStep.cancellationToken = self.cancellationToken
         
@@ -314,7 +327,7 @@ private class StepNode<InputType, OutputType> : CustomDebugStringConvertible {
     }
     
     // Finalizes the cancellation of this step.
-    private func doCancel() {
+    func doCancel() {
         // Call finally handler, if present.
         self.finallyHandler?(.Canceled(cancellationToken))
         // We must clear the finally handler here, as doCancel() is called from the resolve handler
