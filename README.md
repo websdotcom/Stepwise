@@ -141,6 +141,8 @@ All of the examples in this README and others can be found in the library's test
 
 ### Random Goodies
 
+Stepwise is lovingly crafted by and used in [Pagemodo.app](https://itunes.apple.com/us/app/pagemodo-for-social-media/id937853905?mt=8). Check it out if you want to make posting to social networks not terrible.
+
 Set `Stepwise.StepDebugLoggingEnabled` to `true` to get log messages of what's happening in your steps.
 
 ### Swift Versions
