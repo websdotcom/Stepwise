@@ -1,30 +1,18 @@
 # Stepwise
 
-**NOTE:** For Swift 2 support, try the Stepwise 2.0 beta using the `2.0-beta2` tag in Cocoapods or the [swift-2.0](https://github.com/websdotcom/Stepwise/tree/swift-2.0) branch.
-
-Stepwise is a Swift framework for executing a series of steps asynchronously. Steps are single-dependency and cancelable. `Step` objects wrap your closures; they're genericized so you get strongly-typed inputs and outputs. Here's a totally contrived example of steps to fetch an image from the Internet and shrink it by half:
+Stepwise is a Swift framework for executing a series of steps asynchronously. Steps are just closures that take an input and return an output. Outputs are passed as inputs to the next step in the chain. A chain of steps is cancelable and handles errors. Here's a totally contrived example of steps to fetch an image from the Internet and shrink it by half:
 
 ```swift
-let fetchAndResizeImageSteps = toStep { (step: Step<NSURL, UIImage>) in
-    // This is the url we pass into the step chain
-    let url = step.input
-    
-    // Fetch the image data. Obviously we'd be using Alamofire or something irl.
-    if let imageData = NSData(contentsOfURL: url) {
-        // Create the image
-        let image = UIImage(data: imageData)!
-        
-        // Pass it to the next step
-        step.resolve(image)
+let fetchAndResizeImage = toStep { (url : NSURL) -> UIImage in
+    // Fetch the image and create it. Obviously we'd be using Alamofire or something irl.
+    guard let imageData = NSData(contentsOfURL: url), image = UIImage(data: imageData) else {
+        throw NSError(domain: "com.my.domain", code: -1, userInfo: nil)
     }
-    else {
-        // Oh no! Something went wrong!
-        step.error(NSError(domain: "com.my.domain", code: -1, userInfo: nil))
-    }
-}.then { (step: Step<UIImage, UIImage>) in
-    // Grab the fetched image
-    let image = step.input
     
+    // Pass it to the next step
+    return image
+
+}.then { (image : UIImage) -> UIImage in
     // Resize it
     let targetSize = CGSize(width: image.size.width / 2.0, height: image.size.height / 2.0)
     UIGraphicsBeginImageContextWithOptions(targetSize, true, 0.0)
@@ -33,57 +21,51 @@ let fetchAndResizeImageSteps = toStep { (step: Step<NSURL, UIImage>) in
     UIGraphicsEndImageContext()
     
     // Return it
-    step.resolve(resizedImage)
-}.then { (step: Step<UIImage, Void>) in
-    // Get fetched, resized image
-    let image = step.input
-    
+    return resizedImage
+}.then { image in
     // Do something with image here.
-    // Set it to a shared variable, pass it to another step, etc.
-    step.resolve()
+    // Set it on a view, pass it to another step, etc.
 }
 
-// Having set up the chain of steps, pass in a URL to get fetching.
+// Having set up the chain of steps, pass in a URL to get fetching. You can also do this one the chain directly by just following up the final `then { }` with `.start(...)`. 
 let importantImageURL = NSURL(string: "http://i1.kym-cdn.com/entries/icons/original/000/000/774/lime-cat.jpg")!
-fetchAndResizeImageSteps.start(importantImageURL)
+fetchAndResizeImage.start(importantImageURL)
 ```
 
-The first step, created by the `toStep` function, accepts a closure with a single step parameter. The step parameter is of type `Step<NSURL, UIImage>`, so it accepts an `NSURL` as input and outputs a `UIImage` if successful. The first step fetches the data from the URL and tries to create an image from it. If it fails the step results in an error and calls `step.error()`. If all is well the step resolves by calling `step.resolve(image)`.
+The first step, created by the `toStep` function, accepts a closure (or function) with a single input parameter. The input parameter is of type `NSURL` and outputs a `UIImage` if successful. The first step fetches the data from the URL and tries to create an image from it. If it fails the step throws an error. If all is well the step resolves by calling `return image`.
 
 When a step resolves successfully it passes its output as input to the next step, which is created by calling `then()`. In this example the second step resizes the image to half-size, then resolves with it. There is no error case.
 
-The third step, also enqueued with `then()`, is just an example of a step with a `Void` output. Steps with `Void` outputs may call `resolve()` without an argument, just as steps with `Void` inputs may call `start()` without an argument.
+The third step, also enqueued with `then()`, is just an example of a step with a `Void` output. Steps with `Void` outputs don't need to `return` anything, just as steps with `Void` inputs don't need to declare an input at the start of the closure.
 
 ### Errors
 
-In the example above there is no error handler for the `error()` in the first step, but a handler can be added at any point in the chain by calling `onError()`. `onError()` accepts a simple closure with an `NSError` parameter and allows your code to react to errors generated by steps. Here's a quick example:
+In the example above there is no error handler for the `throw` in the first step, but a handler can be added at any point in the chain by calling `onError()`. `onError()` accepts a simple closure with an `ErrorType` parameter and allows your code to react to errors generated by steps. Here's a quick example:
 
 ```swift
 // prints "ERROR: Error in step 1!"
-toStep { (step: Step<Void, String>) in
-    step.error(NSError(domain: "com.my.domain", code: -1, userInfo: [NSLocalizedDescriptionKey : "Error in step 1!"]))
-}.then { (step : Step<String, Int>) in
+toStep { () -> String in
+    throw NSError(domain: "com.my.domain", code: -1, userInfo: [NSLocalizedDescriptionKey : "Error in step 1!"])
+}.then { (input : String) -> Int in
     // This never executes.
-    println("I never execute!")
-    step.resolve(countElements(step.input))
+    print("I never execute!")
+    return input.characters.count
 }.onError { error in
-    println("ERROR: \(error.localizedDescription)")
+    print("ERROR: \((error as NSError).localizedDescription)")
 }.start()
 ```
 
-An important limitation to note is that, at present, a chain of steps can only have a single error handler. You can multiplex responses to errors in the handler by erroring with different domains, codes, or userInfos per step.
+An important limitation to note is that, at present, a chain of steps can only have a single error handler. You can multiplex responses to errors in the handler by checking the result of conditional casts against `error`.
 
 ### Cancellation
 
-Cancellation is baked right into Stepwise. Every step chain has a `cancellationToken` property that returns a `CancellationToken` object. This object provides a single method, `cancel()`, which cancels any step that has this token. Every step in a chain will consult the token before and during execution to see if it has been canceled. Here's an example:
+Cancellation is baked into Stepwise. Every step chain has a `cancellationToken` property that returns a `CancellationToken` object. This object provides a single method, `cancel()`, which cancels any step that has this token. Every step in a chain will consult the token before and during execution to see if it has been canceled. Here's an example:
 
 ```swift
-let willCancelStep = toStep { (step: Step<Void, String>) in
+let willCancelStep = toStep { () -> String in
     // Will never execute.
     step.resolve("some result")
-}
-
-willCancelStep.start()
+}.start()
 
 // Grab the step's token and cancel it.
 let token = willCancelStep.cancellationToken
@@ -102,31 +84,25 @@ Each chain also provides a `finally` method which you can call to attach a handl
 let outputStream : NSOutputStream = ...
 let someDataURL : NSURL = ...
 
-toStep { (step : Step<Void, NSData>) in
-    if let someData = NSData(contentsOfURL: someDataURL) {
-        step.resolve(someData)
+toStep { () -> NSData in
+    guard let someData = NSData(contentsOfURL: someDataURL) else {
+        throw NSError(domain: "com.my.domain.fetch-data", code: -1, userInfo: nil)
     }
-    else {
-        step.error(NSError(domain: "com.my.domain.fetch-data", code: -1, userInfo: nil))
-    }
-}.then { (step: Step<NSData, Void>) in
+    return someData
+}.then { data in
     // Write our data
-    let data = step.input
     var bytes = UnsafePointer<UInt8>(data.bytes)
     var bytesRemaining = data.length
 
     while bytesRemaining > 0 {
         let written = outputStream.write(bytes, maxLength: bytesRemaining)
         if written == -1 {
-            step.error(NSError(domain: "com.my.domain.write-data", code: -1, userInfo: nil))
-            return
+            throw NSError(domain: "com.my.domain.write-data", code: -1, userInfo: nil)
         }
 
         bytesRemaining -= written
         bytes += written
     }
-
-    step.resolve()
 }.onError { error in
     // Handle error here...
 }.finally { resultState in
@@ -134,6 +110,37 @@ toStep { (step : Step<Void, NSData>) in
     outputStream.close()
 }.start()
 ```
+
+### A Note on Closure Signatures
+
+Sometimes Xcode can't guess the input and output types based on what's happening inside a step closure. This is especially true if you save the steps to a variable and `start` it later. When you get type errors, help poor Xcode out by adding a signature to the start of the closure, like this (from example #1 above):
+
+```swift
+let fetchAndResizeImage = toStep { (url : NSURL) -> UIImage in
+    // Let's not repeat ourselves
+}
+
+// Start the chain
+fetchAndResizeImage.start(url)
+```
+
+A closure that takes a `Void` and returns a `Void` would be
+
+```swift
+toStep { () -> Void in
+    // Gaze into the void
+}.start()
+```
+
+### Installing
+
+Use Cocoapods!
+
+    $ gem install cocoapods
+
+if you don't have it, then in your Podfile:
+
+    pod 'Stepwise', '~> 2.0'
 
 ### Tests
 
@@ -147,17 +154,19 @@ Set `Stepwise.StepDebugLoggingEnabled` to `true` to get log messages of what's h
 
 ### Swift Versions
 
-Stepwise uses Swift 1.2. The following table tracks older Swift versions and the corresponding git tag to use for that version.
+Stepwise uses Swift 2.0. The following table tracks older Swift versions and the corresponding git tag to use for that version.
 
 Swift Version | Tag
 ------------- | ---
 1.0 | swift-1.1
 1.1 | swift-1.1
+1.2 | swift-1.2
+2.0 | 2.0
 
 
 ### License
 
-    Copyright (c) 2014, Webs <kevin@webs.com>
+    Copyright (c) 2014-2015, Webs <kevin@webs.com>
 
     Permission to use, copy, modify, and/or distribute this software for any
     purpose with or without fee is hereby granted, provided that the above
