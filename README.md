@@ -1,7 +1,5 @@
 # Stepwise
 
-*NOTE:* Stepwise 2.0, the Swift 2 overhaul, is still in beta and may change. Please open an [issue](https://github.com/websdotcom/Stepwise/issues) if you have questions or suggestions on how the 2.0 API should look/work.
-
 Stepwise is a Swift framework for executing a series of steps asynchronously. Steps are just closures that take an input and return an output. Outputs are passed as inputs to the next step in the chain. A chain of steps is cancelable and handles errors. Here's a totally contrived example of steps to fetch an image from the Internet and shrink it by half:
 
 ```swift
