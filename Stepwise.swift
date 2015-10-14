@@ -191,18 +191,42 @@ public class StepChain<StartInputType, StartOutputType, CurrentInputType, Curren
     
     // MARK: Asynchronous Steps
     
+    /// Execute a new step after this one with a pass/fail handler. Useful if the step should resolve on an aysynchronous callback.
+    ///
+    /// - parameter asyncBody: The body of the step. Takes two parameters: the input, which was the output of the previous step,
+    /// and a Handler object that can pass output to the next step or fail the chain.
+    /// - returns: A new StepChain that ends in the added step. Can be extended with then() and started with start().
     public func then<NextOutputType>(asyncBody: (CurrentOutputType, Handler<NextOutputType>) -> ()) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
         return then(nil, inQueue: DefaultStepQueue, asyncBody: asyncBody)
     }
     
+    /// Execute a new step after this one in `inQueue` with a pass/fail handler. Useful if the step should resolve on an aysynchronous callback.
+    ///
+    /// - parameter inQueue: The queue on which to execute the step. Defaults to default priority global queue.
+    /// - parameter asyncBody: The body of the step. Takes two parameters: the input, which was the output of the previous step,
+    /// and a Handler object that can pass output to the next step or fail the chain.
+    /// - returns: A new StepChain that ends in the added step. Can be extended with then() and started with start().
     public func then<NextOutputType>(inQueue queue: dispatch_queue_t!, asyncBody: (CurrentOutputType, Handler<NextOutputType>) -> ()) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
         return then(nil, inQueue: queue, asyncBody: asyncBody)
     }
-    
+
+    /// Execute a new step after this one named `name` with a pass/fail handler. Useful if the step should resolve on an aysynchronous callback.
+    ///
+    /// - parameter name: The name of the step. Defaults to nil.
+    /// - parameter asyncBody: The body of the step. Takes two parameters: the input, which was the output of the previous step,
+    /// and a Handler object that can pass output to the next step or fail the chain.
+    /// - returns: A new StepChain that ends in the added step. Can be extended with then() and started with start().
     public func then<NextOutputType>(name: String?, asyncBody: (CurrentOutputType, Handler<NextOutputType>) -> ()) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
         return then(name, inQueue: DefaultStepQueue, asyncBody: asyncBody)
     }
-    
+
+    /// Execute a new step after this one named `name` in `inQueue` with a pass/fail handler. Useful if the step should resolve on an aysynchronous callback.
+    ///
+    /// - parameter name: The name of the step. Defaults to nil.
+    /// - parameter inQueue: The queue on which to execute the step. Defaults to default priority global queue.
+    /// - parameter asyncBody: The body of the step. Takes two parameters: the input, which was the output of the previous step,
+    /// and a Handler object that can pass output to the next step or fail the chain.
+    /// - returns: A new StepChain that ends in the added step. Can be extended with then() and started with start().
     public func then<NextOutputType>(name: String?, inQueue queue: dispatch_queue_t!, asyncBody: (CurrentOutputType, Handler<NextOutputType>) -> ()) -> StepChain<StartInputType, StartOutputType, CurrentOutputType, NextOutputType> {
         let step = StepNode<CurrentOutputType, NextOutputType>(name: name, queue: queue, asyncBody: asyncBody)
         return then(step)
