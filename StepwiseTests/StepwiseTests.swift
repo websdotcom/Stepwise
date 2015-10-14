@@ -326,8 +326,8 @@ class StepwiseTests: XCTestCase {
         }
         
         let token = willCancelStep.cancellationToken
-        willCancelStep.start()
         token.cancel("Cancelling for a really good reason.")
+        willCancelStep.start()
         
         let cancelExpectation = expectationWithDescription("Waiting for cancel to take effect.")
         after(1.0) {
@@ -530,6 +530,68 @@ class StepwiseTests: XCTestCase {
         waitForExpectationsWithTimeout(5, handler: nil)
     }
     
+    func testAsyncStepBodies() {
+        let simpleAsyncExpectation = expectationWithDescription("Steps should be asynchronously resolvable.")
+        toStep { (input: Int, handler: Handler<String>) in
+            after(4) {
+                XCTAssertEqual(input, 1)
+                handler.pass("test")
+            }
+        }
+        .then { input in
+            XCTAssertEqual(input, "test")
+            simpleAsyncExpectation.fulfill()
+        }
+        .start(1)
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+        
+        let thenAsyncExpectation = expectationWithDescription("Then steps should also be asynchronously resolvable.")
+        toStep { (input: Int, handler: Handler<String>) in
+            after(2) {
+                handler.pass("test")
+            }
+        }
+        .then("Count the length of the input", inQueue: dispatch_get_main_queue()) { (aString: String, handler: Handler<Int>) in
+            after(2) {
+                handler.pass(aString.characters.count)
+            }
+        }
+        .then { count, handler in
+            handler.pass(count)
+        }
+        .then { input in
+            XCTAssertEqual(input, 4)
+            thenAsyncExpectation.fulfill()
+        }
+        .start(1)
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+        
+        let errorExpectation = expectationWithDescription("Steps should be asynchronously failable.")
+        
+        enum AsyncError : ErrorType {
+            case AnError
+        }
+        
+        toStep(named: "Fail!", inQueue: dispatch_get_main_queue()) { (input: Int, handler: Handler<String>) in
+            after(4) {
+                XCTAssertEqual(input, 1)
+                handler.fail(AsyncError.AnError)
+            }
+        }
+        .then { (aString: String) in
+            // Should never get here.
+            XCTFail()
+        }
+        .onError { error in
+            errorExpectation.fulfill()
+        }
+        .start(1)
+        
+        waitForExpectationsWithTimeout(5, handler: nil)
+    }
+    
     func testDocumentationExamples() {
         // MARK: Example 1
         let example1Expectation = expectationWithDescription("Documentation example 1. Resolving a full chain.")
@@ -580,12 +642,30 @@ class StepwiseTests: XCTestCase {
         }.start()
         
         // MARK: Example 3
-        let example3Expectation = expectationWithDescription("Documentation example 3. Canceling during a step.")
-        var example3DidCancel = true
+        let example3Expectation = expectationWithDescription("Documentation example 3. Asynchronous resolution.")
+        toStep { (input: [String : AnyObject], handler: Handler<String>) in
+            // Passing on a string.
+            // This is an Alamofire request in the documentation.
+//            Alamofire.request(.GET, "http://httpbin.org/get", parameters: input)
+//                .responseString { _, _, result in
+//                    handler.pass(result.value)
+//            }
+            after(2) {
+                handler.pass("test")
+            }
+        }
+        .then { input in
+            XCTAssertEqual(input, "test")
+            example3Expectation.fulfill()
+        }.start(["foo": "bar"])
+        
+        // MARK: Example 4
+        let example4Expectation = expectationWithDescription("Documentation example 4. Canceling during a step.")
+        var example4DidCancel = true
         
         let willCancelStep = toStep { () -> String in
             // Will never execute.
-            example3DidCancel = false
+            example4DidCancel = false
             return "some result"
         }.start()
         
@@ -595,17 +675,17 @@ class StepwiseTests: XCTestCase {
         
         // Test that cancellation happened
         after(1.0) {
-            if example3DidCancel {
+            if example4DidCancel {
                 XCTAssertEqual(token.reason!, "Cancelling for a really good reason.", "Token reason should match reason given")
-                example3Expectation.fulfill()
+                example4Expectation.fulfill()
             }
             else {
                 XCTFail("Step should have been cancelled.")
             }
         }
 
-        // MARK: Example 4
-        let example4Expectation = expectationWithDescription("Documentation example 4. Using finally() blocks.")
+        // MARK: Example 5
+        let example5Expectation = expectationWithDescription("Documentation example 5. Using finally() blocks.")
         let outputStream : NSOutputStream = NSOutputStream(toMemory: ())
         outputStream.open()
         let someDataURL : NSURL = NSURL(fileURLWithPath: NSBundle(forClass: StepwiseTests.self).pathForResource("lime-cat", ofType: "jpg")!)
@@ -640,7 +720,7 @@ class StepwiseTests: XCTestCase {
             // Close the stream here
             outputStream.close()
             
-            example4Expectation.fulfill()
+            example5Expectation.fulfill()
         }.start()
         
         // Wait for all documentation expectations.
