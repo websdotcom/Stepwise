@@ -150,7 +150,7 @@ toStep { () -> Void in
 
 ### Installing
 
-Use Cocoapods!
+Use CocoaPods!
 
     $ gem install cocoapods
 
